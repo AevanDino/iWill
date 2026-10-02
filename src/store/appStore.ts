@@ -11,7 +11,7 @@ import {
   type ResolveResult,
 } from '../lib/collision'
 import { newId } from '../lib/id'
-import { minutesOfDay, snap, toDateKey } from '../lib/time'
+import { DEFAULT_GRID, minutesOfDay, snap, toDateKey } from '../lib/time'
 import type { BlockMove, Category, DateKey, Minutes, RoutineTemplate, Settings, TimeBlock } from '../types'
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dayStartHour: 6,
   dayEndHour: 24,
   notifications: false,
+  grid: DEFAULT_GRID,
   theme: 'system',
 }
 
@@ -310,7 +311,7 @@ export function createAppStore(database: IWillDB = defaultDb, { sync = false } =
         const state = get()
         const routine = state.routines.find((r) => r.id === routineId)
         if (!routine || routine.steps.length === 0) return { ok: false, reason: 'invalid' }
-        const spawned = routineToBlocks(routine, start, state.date)
+        const spawned = routineToBlocks(routine, start, state.date, state.settings.grid)
         const withNew = [...state.blocks, ...spawned]
         const result = resolveCollisions(
           withNew,
@@ -448,9 +449,10 @@ export function routineToBlocks(
   routine: RoutineTemplate,
   start: Minutes,
   date: DateKey,
+  step: Minutes,
   makeId: (index: number) => string = newId,
 ): TimeBlock[] {
-  let t = snap(start)
+  let t = snap(start, step)
   return routine.steps.map((step, i) => {
     const block: TimeBlock = {
       id: makeId(i),
@@ -472,7 +474,7 @@ export const useStore = createAppStore(defaultDb, { sync: true })
 export const routineDuration = (routine: RoutineTemplate) => routine.steps.reduce((n, s) => n + s.duration, 0)
 
 /** Where a routine dropped at `minute` should start: snapped and kept inside the day. */
-export function routineDropStart(routine: RoutineTemplate, minute: Minutes, bounds: Bounds): Minutes {
+export function routineDropStart(routine: RoutineTemplate, minute: Minutes, bounds: Bounds, step: Minutes): Minutes {
   const total = routineDuration(routine)
-  return Math.max(bounds.start, Math.min(snap(minute), bounds.end - total))
+  return Math.max(bounds.start, Math.min(snap(minute, step), bounds.end - total))
 }

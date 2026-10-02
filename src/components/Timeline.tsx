@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { AnimatePresence, motion } from 'motion/react'
 import { useShallow } from 'zustand/react/shallow'
 import { inkOn } from '../lib/color'
+import { layoutFlags } from '../lib/flags'
 import { isMovable, overlaps, resolveCollisions, resolvePush, type ResolveResult } from '../lib/collision'
 import { clamp, formatDuration, formatTime, minutesOfDay, MIN_DURATION, slotSpan, snap, toDateKey } from '../lib/time'
 import { usePomodoro } from '../store/pomodoroStore'
@@ -14,8 +15,10 @@ import {
 } from '../store/appStore'
 import { useClock } from '../store/clock'
 import { useUi } from '../store/uiStore'
-import type { BlockMove, Minutes, TimeBlock } from '../types'
-import { BlockView, type BlockActions, type GripKind } from './BlockView'
+import type { BlockMove, Category, Minutes, TimeBlock } from '../types'
+import { CheckIcon } from './icons'
+import { BlockView, SLIVER_PX, TINY_PX, type BlockActions, type GripKind } from './BlockView'
+import { NowStrip } from './NowStrip'
 import { failureMessage } from './messages'
 
 /** `create`: press-and-drag on empty grid to size a new block. */
@@ -76,6 +79,14 @@ const EDGE = 56
 const DOUBLE_TAP_MS = 260
 /** Stand-in id for the block being drawn by a create gesture. */
 const NEW_ID = 'new-block'
+/** A sliver's flag in the rail, and the room between the lane and the flag for its leader line. */
+const FLAG_HEIGHT = 22
+const FLAG_INSET = 10
+/** Invisible touch target around a sliver, and under its pull tab, in px. */
+const SLIVER_HIT = 24
+const TAB_HIT = 18
+/** Blocks this short always get a pull tab, whatever the zoom. */
+const PULL_TAB_MINUTES = 10
 /** Hold still this long mid-drag to switch between push and slot-in. */
 const HOLD_MS = 600
 /** Pointer drift (px) that still counts as holding still. */
@@ -118,8 +129,8 @@ export function Timeline() {
   const [hold, setHold] = useState<{ key: number; to: DragMode } | null>(null)
 
   // Handlers attached to window read the latest render's values through this ref.
-  const live = useRef({ blocks, bounds, pxPerMin })
-  live.current = { blocks, bounds, pxPerMin }
+  const live = useRef({ blocks, bounds, pxPerMin, grid: settings.grid })
+  live.current = { blocks, bounds, pxPerMin, grid: settings.grid }
 
   const clientToMin = useCallback((clientY: number) => {
     const rect = contentRef.current!.getBoundingClientRect()
@@ -146,10 +157,10 @@ export function Timeline() {
   // ---- gesture engine -----------------------------------------------------
   const computePreview = useCallback(
     (g: Gesture, clientY: number): DragPreview => {
-      const { bounds } = live.current
+      const { bounds, grid } = live.current
       const m = clientToMin(clientY)
       if (g.kind === 'create') {
-        const target = slotSpan(g.origin.start, m, bounds)
+        const target = slotSpan(g.origin.start, m, bounds, grid)
         const ghost: TimeBlock = { id: g.id, date: '', title: '', categoryId: '', ...target, completed: false, locked: false }
         const result = resolveCollisions(
           [...live.current.blocks, ghost],
@@ -163,7 +174,7 @@ export function Timeline() {
         const lo = bounds.start - Math.min(...g.group.map((o) => o.start))
         const hi = bounds.end - Math.max(...g.group.map((o) => o.end))
         const rawDelta = clamp(m - g.grabOffset - g.origin.start, lo, hi)
-        const delta = clamp(snap(g.origin.start + rawDelta) - g.origin.start, lo, hi)
+        const delta = clamp(snap(g.origin.start + rawDelta, grid) - g.origin.start, lo, hi)
         const raw = new Map(g.group.map((o) => [o.id, { start: o.start + rawDelta, end: o.end + rawDelta }]))
         const targets = g.group.map((o) => ({ id: o.id, start: o.start + delta, end: o.end + delta }))
         const target = { start: g.origin.start + delta, end: g.origin.end + delta }
@@ -179,11 +190,11 @@ export function Timeline() {
       if (g.kind === 'start') {
         const start = clamp(m, bounds.start, g.origin.end - MIN_DURATION)
         raw = { start, end: g.origin.end }
-        target = { start: Math.min(snap(start), g.origin.end - MIN_DURATION), end: g.origin.end }
+        target = { start: Math.min(snap(start, grid), g.origin.end - MIN_DURATION), end: g.origin.end }
       } else {
         const end = clamp(m, g.origin.start + MIN_DURATION, bounds.end)
         raw = { start: g.origin.start, end }
-        target = { start: g.origin.start, end: Math.max(snap(end), g.origin.start + MIN_DURATION) }
+        target = { start: g.origin.start, end: Math.max(snap(end, grid), g.origin.start + MIN_DURATION) }
       }
       const targets = [{ id: g.id, ...target }]
       const result = resolvePush(live.current.blocks, targets, opts)
@@ -304,8 +315,8 @@ export function Timeline() {
       if (!g.active) {
         if (g.kind === 'create') {
           // A plain click on empty grid: a 30-minute block in that slot.
-          const { bounds } = live.current
-          const start = clamp(Math.floor(g.origin.start / 15) * 15, bounds.start, bounds.end - 30)
+          const { bounds, grid } = live.current
+          const start = clamp(Math.floor(g.origin.start / grid) * grid, bounds.start, bounds.end - 30)
           createBlock(start, start + 30)
         } else onTap(g.id)
         return
@@ -480,11 +491,13 @@ export function Timeline() {
       focus: startFocus,
       toggleLock: (id) => useStore.getState().toggleLock(id),
       toggleComplete: (id) => useStore.getState().toggleComplete(id),
-      nudge(id, dStart, dEnd) {
-        const b = useStore.getState().blocks.find((x) => x.id === id)
+      nudge(id, kind, dir) {
+        const { blocks, settings } = useStore.getState()
+        const b = blocks.find((x) => x.id === id)
         if (!b || b.locked) return
-        const start = b.start + dStart
-        const end = b.end + dEnd
+        const step = settings.grid * dir
+        const start = kind === 'move' ? b.start + step : b.start
+        const end = b.end + step
         if (end - start < MIN_DURATION) return
         const r = useStore.getState().moveBlock(id, start, end)
         if (!r.ok) useUi.getState().notify(failureMessage(r))
@@ -507,8 +520,8 @@ export function Timeline() {
     const m = probe(routineDrag.x, routineDrag.y)
     const routine = routines.find((r) => r.id === routineDrag.routineId)
     if (m == null || !routine) return null
-    const start = routineDropStart(routine, m, bounds)
-    const ghosts = routineToBlocks(routine, start, date, (i) => `ghost-${i}`)
+    const start = routineDropStart(routine, m, bounds, settings.grid)
+    const ghosts = routineToBlocks(routine, start, date, settings.grid, (i) => `ghost-${i}`)
     const result = resolveCollisions(
       [...blocks, ...ghosts],
       ghosts.map(({ id, start, end }) => ({ id, start, end })),
@@ -537,6 +550,18 @@ export function Timeline() {
     return { pos, displaced }
   }, [blocks, preview, routinePreview])
 
+  // Tell the timer pane and Now strip where blocks would land, so they can preview the drag.
+  useEffect(() => {
+    if (!preview?.result.ok) {
+      useUi.getState().setLanding(null)
+      return
+    }
+    const landing: Record<string, Span> = {}
+    for (const m of [...preview.result.moves, ...preview.targets]) landing[m.id] = { start: m.start, end: m.end }
+    useUi.getState().setLanding(landing)
+  }, [preview])
+  useEffect(() => () => useUi.getState().setLanding(null), [])
+
   // Select mode belongs to one day, and forgets blocks that are gone.
   useEffect(() => {
     useUi.getState().stopSelecting()
@@ -556,6 +581,30 @@ export function Timeline() {
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
   const activeId = isToday ? blocks.find((b) => !b.completed && b.start <= nowMin && nowMin < b.end)?.id : undefined
+
+  // ---- slivers: blocks too short on screen to hold their own text ---------
+  const isSliver = (span: Span) => (span.end - span.start) * pxPerMin < SLIVER_PX
+  // Only committed blocks decide the rail, so the lane doesn't jump mid-drag.
+  const hasRail = blocks.some(isSliver)
+  /** Where a block lands if the current drag is released: snapped target, cascade result, or where it is. */
+  const landing = (b: TimeBlock): Span => {
+    const target = preview?.targets.find((t) => t.id === b.id)
+    if (target) return target
+    return preview?.raw.has(b.id) ? b : display.pos.get(b.id)!
+  }
+  // 10 minutes or less, or drawn tiny at this zoom.
+  const hasPullTab = (b: TimeBlock) => b.end - b.start <= PULL_TAB_MINUTES || (b.end - b.start) * pxPerMin < TINY_PX
+  const slivers = blocks.filter((b) => isSliver(display.pos.get(b.id)!))
+  const flagTops = layoutFlags(
+    slivers.map((b) => {
+      const p = display.pos.get(b.id)!
+      return { id: b.id, center: yOf((p.start + p.end) / 2) }
+    }),
+    FLAG_HEIGHT,
+    4,
+    0,
+    contentHeight,
+  )
 
   // ---- initial scroll: now (today) or first block -------------------------
   useLayoutEffect(() => {
@@ -577,11 +626,13 @@ export function Timeline() {
 
   return (
     <div ref={scrollRef} className="relative h-full overflow-y-auto overscroll-contain" data-testid="timeline">
+      <NowStrip />
       <div className={`px-0 pt-4 ${selecting ? 'pb-44' : 'pb-24'}`}>
         <div
           ref={contentRef}
           onPointerDown={createStart}
-          className="relative cursor-copy select-none"
+          className="timeline-content relative cursor-copy select-none"
+          data-rail={hasRail || undefined}
           style={{
             height: contentHeight,
             backgroundImage: `linear-gradient(to bottom, var(--grid-strong) 2px, transparent 2px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px)`,
@@ -608,7 +659,7 @@ export function Timeline() {
             dragTargets.map((t) => (
               <div
                 key={t.id}
-                className="pointer-events-none absolute right-3 left-[64px] border-[3px] border-dashed sm:right-5"
+                className="lane pointer-events-none border-[3px] border-dashed"
                 style={{
                   top: yOf(t.start),
                   height: (t.end - t.start) * pxPerMin,
@@ -650,7 +701,7 @@ export function Timeline() {
                 animate={{ opacity: 1, x: 0, top: yOf(g.start), height: (g.end - g.start) * pxPerMin }}
                 exit={{ opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                className="pointer-events-none absolute right-3 left-[64px] flex items-center gap-1.5 border-[3px] border-dashed px-2 text-xs font-black sm:right-5"
+                className="lane pointer-events-none flex items-center gap-1.5 border-[3px] border-dashed px-2 text-xs font-black"
                 style={{
                   zIndex: 25,
                   background: catById.get(g.categoryId)?.color ?? '#ddd',
@@ -674,6 +725,8 @@ export function Timeline() {
                 block={b}
                 category={catById.get(b.categoryId)}
                 top={yOf(p.start)}
+                liveStart={landing(b).start}
+                liveEnd={landing(b).end}
                 height={Math.max(6, (p.end - p.start) * pxPerMin)}
                 mode={
                   isDragging
@@ -685,6 +738,7 @@ export function Timeline() {
                 lifted={liftedId === b.id}
                 invalid={isDragging && !preview!.result.ok}
                 slotting={isDragging && preview!.mode === 'slot'}
+                pullTab={hasPullTab(b)}
                 selecting={selecting}
                 selected={selected.has(b.id)}
                 isActive={activeId === b.id}
@@ -695,6 +749,79 @@ export function Timeline() {
               />
             )
           })}
+
+          {/* Slivers are hard to hit: a taller invisible handle each to move them, shortest on top. */}
+          {slivers
+            .filter((b) => !preview?.raw.has(b.id))
+            .sort((a, b) => b.end - b.start - (a.end - a.start))
+            .map((b) => {
+              const p = display.pos.get(b.id)!
+              return (
+                <div
+                  key={b.id}
+                  className="lane cursor-grab"
+                  style={{ top: yOf((p.start + p.end) / 2) - SLIVER_HIT / 2, height: SLIVER_HIT, zIndex: 13 }}
+                  onPointerDown={(e) => actions.gestureStart(e, b.id, 'move')}
+                  aria-hidden="true"
+                />
+              )
+            })}
+
+          {/* Short blocks get a pull tab under their bottom edge: a bigger target than the edge itself. */}
+          {blocks
+            .filter((b) => !b.locked && !selecting && !preview?.raw.has(b.id) && hasPullTab(b))
+            .map((b) => {
+              const p = display.pos.get(b.id)!
+              const color = catById.get(b.categoryId)?.color ?? '#dddddd'
+              return (
+                <div
+                  key={b.id}
+                  className="lane pointer-events-none flex justify-center"
+                  style={{ top: yOf(p.end) - 2, height: TAB_HIT, zIndex: 14 }}
+                >
+                  <div
+                    className="group/tab pointer-events-auto flex w-14 cursor-ns-resize touch-none justify-center"
+                    onPointerDown={(e) => actions.gestureStart(e, b.id, 'end')}
+                    data-tip="Drag to change the length"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="flex h-2.5 w-9 items-center justify-center border-2 border-t-0 border-line group-hover/tab:h-3"
+                      style={{ background: color }}
+                    >
+                      <span className="h-0.5 w-4 opacity-60" style={{ background: inkOn(color) }} />
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+
+          {hasRail && (
+            <div className="pointer-events-none absolute inset-y-0 right-0" style={{ left: 'calc(100% - var(--lane-right))' }}>
+              <svg className="absolute top-0 left-0 overflow-visible" width={FLAG_INSET} height={contentHeight} aria-hidden="true">
+                {slivers.map((b) => {
+                  const p = display.pos.get(b.id)!
+                  const from = yOf((p.start + p.end) / 2)
+                  const to = (flagTops.get(b.id) ?? from) + FLAG_HEIGHT / 2
+                  return <path key={b.id} d={`M0 ${from} H3 L${FLAG_INSET} ${to}`} fill="none" stroke="var(--line)" strokeWidth={2} />
+                })}
+              </svg>
+              {slivers.map((b) => (
+                <SliverFlag
+                  key={b.id}
+                  end={landing(b).end}
+                  block={b}
+                  category={catById.get(b.categoryId)}
+                  top={flagTops.get(b.id) ?? 0}
+                  active={activeId === b.id}
+                  nowMin={nowMin}
+                  selecting={selecting}
+                  selected={selected.has(b.id)}
+                  onPointerDown={(e) => actions.gestureStart(e, b.id, 'move')}
+                />
+              ))}
+            </div>
+          )}
 
           {isToday && <NowLine yOf={yOf} bounds={bounds} />}
         </div>
@@ -741,6 +868,62 @@ function startFocus(id: string) {
     return
   }
   void usePomodoro.getState().startFor(id, { run: true })
+}
+
+/** The label for a sliver: its details, beside it in the rail. Also a drag handle for it. */
+function SliverFlag({
+  block,
+  category,
+  top,
+  end,
+  active,
+  nowMin,
+  selecting,
+  selected,
+  onPointerDown,
+}: {
+  block: TimeBlock
+  category: Category | undefined
+  top: number
+  /** Live end time, so "Xm left" follows a drag. */
+  end: number
+  active: boolean
+  nowMin: number
+  selecting: boolean
+  selected: boolean
+  onPointerDown(e: PointerEvent<HTMLElement>): void
+}) {
+  const color = category?.color ?? '#dddddd'
+  const detail = active ? `${Math.max(1, Math.ceil(end - nowMin))}m left` : formatDuration(block.end - block.start)
+  return (
+    <motion.div
+      initial={false}
+      animate={{ top }}
+      transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+      className="pointer-events-auto absolute right-1.5 flex cursor-grab items-center gap-1 border-2 border-line px-1.5 text-[11px] leading-none font-black shadow-brutal-sm select-none"
+      style={{
+        left: FLAG_INSET,
+        height: FLAG_HEIGHT,
+        background: color,
+        color: inkOn(color),
+        opacity: block.completed ? 0.72 : 1,
+        outline: selecting && selected ? '3px solid var(--accent)' : undefined,
+        outlineOffset: 1,
+      }}
+      onPointerDown={onPointerDown}
+      aria-hidden="true"
+    >
+      {selecting && (
+        <span className={`grid size-3 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-[#111] text-white' : ''}`}>
+          {selected && <CheckIcon size={8} />}
+        </span>
+      )}
+      {category?.emoji && <span className="shrink-0">{category.emoji}</span>}
+      <span className={`min-w-0 flex-1 truncate ${block.completed ? 'line-through' : ''}`}>{block.title}</span>
+      {block.locked && <span className="shrink-0">🔒</span>}
+      <span className="shrink-0 font-mono text-[10px] opacity-80">{detail}</span>
+    </motion.div>
+  )
 }
 
 function NowLine({ yOf, bounds }: { yOf: (m: number) => number; bounds: { start: number; end: number } }) {

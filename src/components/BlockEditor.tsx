@@ -10,7 +10,7 @@ import { failureMessage } from './messages'
 import { TagChip } from './tags/TagChip'
 import { TagForm } from './tags/TagForm'
 
-const QUICK_DURATIONS = [15, 30, 45, 60, 90, 120]
+const QUICK_DURATIONS = [5, 10, 15, 30, 45, 60, 90, 120]
 
 /** Midnight at the end of the day is kept as "24:00" so it parses after the start. */
 const toField = (m: number) => (m >= 24 * 60 ? '24:00' : formatTime(m))
@@ -139,7 +139,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
               <input
                 className="field flex-1 font-mono text-lg"
                 type="time"
-                step={900}
+                step={300}
                 aria-label="Start"
                 value={start}
                 onChange={(e) => setStart(e.target.value)}
@@ -150,7 +150,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
               <input
                 className="field flex-1 font-mono text-lg"
                 type="time"
-                step={900}
+                step={300}
                 aria-label="End"
                 value={end === '24:00' ? '23:59' : end}
                 onChange={(e) => setEnd(e.target.value === '23:59' ? '24:00' : e.target.value)}
@@ -214,7 +214,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
             type="button"
             className="btn btn-icon hover:bg-hot! hover:text-white!"
             aria-label="Delete block"
-            title="Delete block"
+            data-tip="Delete block"
             onClick={() => {
               useStore.getState().deleteBlock(block.id)
               useUi.getState().notify('🗑️ Block deleted')
@@ -227,7 +227,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
             className="btn btn-icon"
             aria-pressed={block.locked}
             aria-label={block.locked ? 'Unlock block' : 'Lock block'}
-            title={block.locked ? 'Locked: never pushed around' : 'Lock: never gets pushed around'}
+            data-tip={block.locked ? 'Locked: never pushed around' : 'Lock: never gets pushed around'}
             onClick={() => useStore.getState().toggleLock(block.id)}
           >
             {block.locked ? <LockIcon size={16} /> : <UnlockIcon size={16} />}
@@ -237,7 +237,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
             className="btn btn-icon"
             aria-pressed={block.completed}
             aria-label={block.completed ? 'Mark not done' : 'Mark done'}
-            title={block.completed ? 'Mark not done' : 'Mark done'}
+            data-tip={block.completed ? 'Mark not done' : 'Mark done'}
             onClick={() => useStore.getState().toggleComplete(block.id)}
           >
             <CheckIcon size={16} />
@@ -246,7 +246,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
             type="button"
             className="btn btn-icon"
             aria-label="Select this and more blocks"
-            title="Select this and more blocks to move together"
+            data-tip="Select this and more blocks to move together"
             onClick={() => useUi.getState().startSelecting([block.id])}
           >
             <SelectIcon size={16} />

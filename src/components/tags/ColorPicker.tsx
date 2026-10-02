@@ -17,7 +17,7 @@ export function ColorPicker({ value, onChange }: { value: string; onChange(color
           role="radio"
           aria-checked={c === current}
           aria-label={c}
-          title={c}
+          data-tip={c}
           onClick={() => onChange(c)}
           className={`${swatch} ${c === current ? raised : 'hover:-translate-x-px hover:-translate-y-px'}`}
           style={{ background: c, color: inkOn(c) }}
@@ -26,7 +26,7 @@ export function ColorPicker({ value, onChange }: { value: string; onChange(color
         </button>
       ))}
       <label
-        title="Custom colour"
+        data-tip="Custom colour"
         className={`${swatch} cursor-pointer ${custom ? raised : 'hover:-translate-x-px hover:-translate-y-px'}`}
         style={{
           background: custom ? value : 'conic-gradient(#ff5d5d, #ffd23f, #3ddc97, #4d96ff, #b69cff, #ff5d8f, #ff5d5d)',

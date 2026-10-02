@@ -1,9 +1,15 @@
 import type { DateKey, Minutes } from '../types'
 
-export const SNAP: Minutes = 15
-export const MIN_DURATION: Minutes = 15
+/** Default snapping grid; the user can pick 5, 10 or 15 minutes in Settings. */
+export const GRID_OPTIONS = [5, 10, 15] as const
+export type Grid = (typeof GRID_OPTIONS)[number]
+export const DEFAULT_GRID: Grid = 5
+/** The shortest block, whatever the grid. */
+export const MIN_DURATION: Minutes = 5
 
-export const snap = (m: Minutes, step: Minutes = SNAP): Minutes => Math.round(m / step) * step
+export const snap = (m: Minutes, step: Minutes): Minutes => Math.round(m / step) * step
+/** Round up to the next grid line. */
+export const ceilTo = (m: Minutes, step: Minutes): Minutes => Math.ceil(m / step) * step
 
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -15,7 +21,7 @@ export function slotSpan(
   from: Minutes,
   to: Minutes,
   bounds: { start: Minutes; end: Minutes },
-  step: Minutes = SNAP,
+  step: Minutes,
 ): { start: Minutes; end: Minutes } {
   const slot = (m: Minutes) => clamp(Math.floor(m / step) * step, bounds.start, bounds.end - step)
   const a = slot(from)

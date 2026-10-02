@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { notificationsSupported, requestNotificationPermission, sendNotification } from '../lib/notify'
+import { GRID_OPTIONS } from '../lib/time'
 import { useStore, type Theme } from '../store/appStore'
 import { useUi } from '../store/uiStore'
 import { BellIcon, BellOffIcon, CloseIcon, MinusIcon, PlusIcon } from './icons'
@@ -104,6 +105,24 @@ export function SettingsPanel() {
                 </select>
               </label>
             </div>
+
+            <fieldset>
+              <legend className="label mb-1">Time grid</legend>
+              <div className="flex gap-1.5">
+                {GRID_OPTIONS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    className="btn flex-1 font-mono text-sm"
+                    aria-pressed={settings.grid === g}
+                    onClick={() => update({ grid: g })}
+                  >
+                    {g} min
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs font-semibold text-muted">Where drags snap. Blocks can be as short as 5 minutes.</p>
+            </fieldset>
 
             <div>
               <span className="label">Tags</span>

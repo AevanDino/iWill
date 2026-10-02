@@ -134,3 +134,10 @@ export const ArrowDownIcon = (p: IconProps) => (
     <path d="M12 4v15M5 13l7 7 7-7" />
   </Icon>
 )
+export const MoreIcon = (p: IconProps) => (
+  <Icon {...p} strokeWidth={0}>
+    {[5, 12, 19].map((x) => (
+      <rect key={x} x={x - 2} y="10" width="4" height="4" fill="currentColor" />
+    ))}
+  </Icon>
+)

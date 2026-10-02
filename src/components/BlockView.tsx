@@ -2,12 +2,17 @@ import { memo, type KeyboardEvent, type PointerEvent } from 'react'
 import { motion } from 'motion/react'
 import { inkOn } from '../lib/color'
 import { CASCADE_SPRING, INSTANT, SNAP_SPRING } from '../lib/physics'
-import { clamp, formatDuration, formatTime, minutesOfDay, SNAP } from '../lib/time'
+import { clamp, formatDuration, formatTime, minutesOfDay } from '../lib/time'
 import { useClock } from '../store/clock'
 import type { Category, TimeBlock } from '../types'
 import { CapIcon, CheckIcon, LockIcon, PlayIcon } from './icons'
 
 export type GripKind = 'move' | 'start' | 'end'
+
+/** Blocks shorter than this on screen are drawn as slivers; the timeline shows their details in a flag. */
+export const SLIVER_PX = 16
+/** Below this the block's text shrinks to one small line. */
+export const TINY_PX = 22
 
 export interface BlockActions {
   gestureStart(e: PointerEvent<HTMLElement>, id: string, kind: GripKind): void
@@ -16,7 +21,8 @@ export interface BlockActions {
   focus(id: string): void
   toggleLock(id: string): void
   toggleComplete(id: string): void
-  nudge(id: string, dStart: number, dEnd: number): void
+  /** Keyboard nudge by one grid step: `move` shifts the block, `resize` moves its end. */
+  nudge(id: string, kind: 'move' | 'resize', dir: 1 | -1): void
   open(id: string): void
   remove(id: string): void
 }
@@ -25,6 +31,13 @@ interface Props {
   block: TimeBlock
   category: Category | undefined
   top: number
+  /**
+   * Where the block would land if the drag on screen were released (or its
+   * committed times when nothing's moving). Countdowns use these so they
+   * follow a move or resize live.
+   */
+  liveStart: number
+  liveEnd: number
   height: number
   mode: 'idle' | 'dragging' | 'displaced'
   lifted: boolean
@@ -36,6 +49,8 @@ interface Props {
   canStart: boolean
   /** Being dragged in slot-in mode: it passes through blocks instead of pushing them. */
   slotting: boolean
+  /** The timeline draws a pull tab under this block, so its own bottom grip stays invisible. */
+  pullTab: boolean
   /** Select mode is on: taps toggle selection, and the block's own buttons step aside. */
   selecting: boolean
   selected: boolean
@@ -47,6 +62,8 @@ export const BlockView = memo(function BlockView({
   block,
   category,
   top,
+  liveStart,
+  liveEnd,
   height,
   mode,
   lifted,
@@ -56,6 +73,7 @@ export const BlockView = memo(function BlockView({
   isPast,
   canStart,
   slotting,
+  pullTab,
   selecting,
   selected,
   actions,
@@ -63,7 +81,10 @@ export const BlockView = memo(function BlockView({
   const pinned = block.locked
   const color = category?.color ?? '#dddddd'
   const compact = height < 50
-  const tiny = height < 22
+  const tiny = height < TINY_PX
+  const sliver = height < SLIVER_PX
+  // Slivers are too thin to grab by an edge: the timeline's pull tab resizes them instead.
+  const resizable = !pinned && !selecting && !sliver
   const missed = isPast && !block.completed
   const raised = mode === 'dragging' || lifted
 
@@ -71,7 +92,7 @@ export const BlockView = memo(function BlockView({
     const target = e.target as HTMLElement
     if (target.closest('button')) return
     let grip = (target.closest('[data-grip]') as HTMLElement | null)?.dataset.grip as GripKind | undefined
-    if (!grip && !pinned && !selecting && e.pointerType !== 'touch') {
+    if (!grip && resizable && e.pointerType !== 'touch') {
       // The grip strips sit inside the border; treat the border band as edge too.
       const rect = e.currentTarget.getBoundingClientRect()
       const edge = Math.min(12, rect.height / 4)
@@ -83,7 +104,6 @@ export const BlockView = memo(function BlockView({
 
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.target !== e.currentTarget) return
-    const step = SNAP
     switch (e.key) {
       case 'Enter':
       case ' ':
@@ -92,13 +112,11 @@ export const BlockView = memo(function BlockView({
         break
       case 'ArrowUp':
         e.preventDefault()
-        if (e.shiftKey) actions.nudge(block.id, 0, -step)
-        else actions.nudge(block.id, -step, -step)
+        actions.nudge(block.id, e.shiftKey ? 'resize' : 'move', -1)
         break
       case 'ArrowDown':
         e.preventDefault()
-        if (e.shiftKey) actions.nudge(block.id, 0, step)
-        else actions.nudge(block.id, step, step)
+        actions.nudge(block.id, e.shiftKey ? 'resize' : 'move', 1)
         break
       case 'Delete':
       case 'Backspace':
@@ -112,6 +130,7 @@ export const BlockView = memo(function BlockView({
     <motion.div
       role="button"
       tabIndex={0}
+      data-block-id={block.id}
       aria-label={`${block.title}, ${formatTime(block.start)} to ${formatTime(block.end)}${block.completed ? ', done' : ''}${block.locked ? ', locked' : ''}${isActive ? ', in progress' : ''}${selecting && selected ? ', selected' : ''}`}
       aria-pressed={selecting ? selected : undefined}
       aria-keyshortcuts="Enter ArrowUp ArrowDown Shift+ArrowUp Shift+ArrowDown Delete"
@@ -131,7 +150,7 @@ export const BlockView = memo(function BlockView({
         default: SNAP_SPRING,
       }}
       className={[
-        'absolute right-3 left-[64px] select-none overflow-hidden outline-none sm:right-5',
+        'lane select-none overflow-hidden outline-none',
         'focus-visible:ring-4 focus-visible:ring-accent focus-visible:ring-offset-2',
         pinned ? 'cursor-pointer' : mode === 'dragging' ? 'cursor-grabbing' : 'cursor-grab',
         isActive && mode === 'idle' ? 'is-active-block' : '',
@@ -140,18 +159,19 @@ export const BlockView = memo(function BlockView({
         zIndex: raised ? 30 : isActive ? 12 : 10,
         backgroundColor: color,
         color: inkOn(color),
-        border: `3px ${block.locked ? 'double' : slotting ? 'dashed' : 'solid'} ${invalid ? 'var(--hot)' : 'var(--line)'}`,
-        borderWidth: block.locked ? 5 : 3,
+        border: `3px ${block.locked && !sliver ? 'double' : slotting ? 'dashed' : 'solid'} ${invalid ? 'var(--hot)' : 'var(--line)'}`,
+        // A 3px border top and bottom would swallow a 7px sliver.
+        borderWidth: sliver ? 2 : block.locked ? 5 : 3,
         filter: missed ? 'saturate(0.35)' : undefined,
         outline: selected && selecting ? '4px solid var(--accent)' : focused ? '4px solid var(--phase-focus)' : undefined,
         outlineOffset: 3,
         opacity: block.completed && !isActive ? 0.72 : 1,
       }}
     >
-      {isActive && <LiquidFill start={block.start} end={block.end} color={color} />}
+      {isActive && <LiquidFill start={liveStart} end={liveEnd} color={color} />}
       {(block.completed || missed) && <div className="hatched pointer-events-none absolute inset-0" />}
 
-      {!pinned && !selecting && (
+      {resizable && (
         <>
           <div
             data-grip="start"
@@ -163,92 +183,101 @@ export const BlockView = memo(function BlockView({
             className="group/grip absolute inset-x-0 bottom-0 z-20 flex h-2.5 cursor-ns-resize touch-none justify-center"
             aria-hidden="true"
           >
-            <span className="mt-0.5 h-1 w-8 bg-current opacity-25 group-hover/grip:opacity-70" />
+            {!pullTab && <span className="mt-0.5 h-1 w-8 bg-current opacity-25 group-hover/grip:opacity-70" />}
           </div>
         </>
       )}
 
-      <div
-        className={`relative z-10 flex h-full min-w-0 gap-2 px-2 ${compact ? 'items-center py-0' : 'items-start py-1.5'}`}
-      >
-        <div className="min-w-0 flex-1">
-          <div
-            className={`flex items-center gap-1.5 font-black leading-tight ${tiny ? 'text-[11px]' : 'text-sm'} ${block.completed ? 'line-through decoration-[3px]' : ''}`}
-          >
-            {selecting && (
-              <span
-                className={`grid size-4 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-[#111] text-white' : ''}`}
-                aria-hidden="true"
-              >
-                {selected && <CheckIcon size={10} />}
-              </span>
+      {sliver ? (
+        height >= 12 &&
+        category?.emoji && (
+          <span className="relative z-10 flex h-full items-center px-1.5 text-[9px] leading-none" aria-hidden="true">
+            {category.emoji}
+          </span>
+        )
+      ) : (
+        <div
+          className={`relative z-10 flex h-full min-w-0 gap-2 px-2 ${compact ? 'items-center py-0' : 'items-start py-1.5'}`}
+        >
+          <div className="min-w-0 flex-1">
+            <div
+              className={`flex items-center gap-1.5 font-black leading-tight ${tiny ? 'text-[11px]' : 'text-sm'} ${block.completed ? 'line-through decoration-[3px]' : ''}`}
+            >
+              {selecting && (
+                <span
+                  className={`grid size-4 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-[#111] text-white' : ''}`}
+                  aria-hidden="true"
+                >
+                  {selected && <CheckIcon size={10} />}
+                </span>
+              )}
+              {category?.emoji && <span aria-hidden="true">{category.emoji}</span>}
+              <span className="truncate">{block.title}</span>
+              {focused && (
+                <span className="shrink-0 border-2 border-[#111] bg-(--phase-focus) px-1 text-[10px] font-black tracking-wider uppercase">
+                  Focus
+                </span>
+              )}
+              {!!block.pomodoros && (
+                <span className="shrink-0 font-mono text-[11px] font-bold" data-tip={`${block.pomodoros} Pomodoros done`}>
+                  🍅{block.pomodoros}
+                </span>
+              )}
+              {compact && !tiny && (
+                <span className="shrink-0 font-mono text-[11px] font-bold opacity-70">{formatTime(block.start)}</span>
+              )}
+            </div>
+            {!compact && (
+              <div className="mt-0.5 font-mono text-[11px] font-bold opacity-75">
+                {formatTime(block.start)}–{formatTime(block.end)} · {formatDuration(block.end - block.start)}
+              </div>
             )}
-            {category?.emoji && <span aria-hidden="true">{category.emoji}</span>}
-            <span className="truncate">{block.title}</span>
-            {focused && (
-              <span className="shrink-0 border-2 border-[#111] bg-(--phase-focus) px-1 text-[10px] font-black tracking-wider uppercase">
-                Focus
-              </span>
-            )}
-            {!!block.pomodoros && (
-              <span className="shrink-0 font-mono text-[11px] font-bold" title={`${block.pomodoros} Pomodoros done`}>
-                🍅{block.pomodoros}
-              </span>
-            )}
-            {compact && !tiny && (
-              <span className="shrink-0 font-mono text-[11px] font-bold opacity-70">{formatTime(block.start)}</span>
-            )}
+            {isActive && height >= 64 && <TimeLeft end={liveEnd} />}
           </div>
-          {!compact && (
-            <div className="mt-0.5 font-mono text-[11px] font-bold opacity-75">
-              {formatTime(block.start)}–{formatTime(block.end)} · {formatDuration(block.end - block.start)}
+
+          {!tiny && mode !== 'dragging' && !selecting && (
+            <div className="flex shrink-0 items-center gap-1">
+              {block.locked && (
+                <SmallButton label="Unlock block" onClick={() => actions.toggleLock(block.id)}>
+                  <LockIcon size={13} />
+                </SmallButton>
+              )}
+              {!block.completed && !focused && (isActive || canStart) && (
+                <SmallButton label={`Focus on ${block.title} with a Pomodoro`} onClick={() => actions.focus(block.id)}>
+                  <span className="text-[12px] leading-none" aria-hidden="true">
+                    🍅
+                  </span>
+                </SmallButton>
+              )}
+              {isActive ? (
+                <button
+                  type="button"
+                  onClick={() => actions.cap(block.id)}
+                  className="flex items-center gap-1 border-[3px] border-[#111] bg-[#111] px-2 py-0.5 text-[11px] font-black tracking-wider text-white uppercase shadow-[2px_2px_0_0_#fff] hover:bg-[#ff3b3b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                  data-tip="Finish now and pull the rest of your day up"
+                >
+                  <CapIcon size={12} /> Cap
+                </button>
+              ) : (
+                <>
+                  {canStart && (
+                    <SmallButton label={`Start ${block.title} now`} onClick={() => actions.startNow(block.id)}>
+                      <PlayIcon size={12} />
+                    </SmallButton>
+                  )}
+                  <SmallButton
+                    label={block.completed ? 'Mark not done' : 'Mark done'}
+                    pressed={block.completed}
+                    onClick={() => actions.toggleComplete(block.id)}
+                  >
+                    <CheckIcon size={13} />
+                  </SmallButton>
+                </>
+              )}
             </div>
           )}
-          {isActive && height >= 64 && <TimeLeft end={block.end} />}
         </div>
-
-        {!tiny && mode !== 'dragging' && !selecting && (
-          <div className="flex shrink-0 items-center gap-1">
-            {block.locked && (
-              <SmallButton label="Unlock block" onClick={() => actions.toggleLock(block.id)}>
-                <LockIcon size={13} />
-              </SmallButton>
-            )}
-            {!block.completed && !focused && (isActive || canStart) && (
-              <SmallButton label={`Focus on ${block.title} with a Pomodoro`} onClick={() => actions.focus(block.id)}>
-                <span className="text-[12px] leading-none" aria-hidden="true">
-                  🍅
-                </span>
-              </SmallButton>
-            )}
-            {isActive ? (
-              <button
-                type="button"
-                onClick={() => actions.cap(block.id)}
-                className="flex items-center gap-1 border-[3px] border-[#111] bg-[#111] px-2 py-0.5 text-[11px] font-black tracking-wider text-white uppercase shadow-[2px_2px_0_0_#fff] hover:bg-[#ff3b3b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
-                title="Finish now and pull the rest of your day up"
-              >
-                <CapIcon size={12} /> Cap
-              </button>
-            ) : (
-              <>
-                {canStart && (
-                  <SmallButton label={`Start ${block.title} now`} onClick={() => actions.startNow(block.id)}>
-                    <PlayIcon size={12} />
-                  </SmallButton>
-                )}
-                <SmallButton
-                  label={block.completed ? 'Mark not done' : 'Mark done'}
-                  pressed={block.completed}
-                  onClick={() => actions.toggleComplete(block.id)}
-                >
-                  <CheckIcon size={13} />
-                </SmallButton>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      )}
     </motion.div>
   )
 })
@@ -269,7 +298,7 @@ function SmallButton({
       type="button"
       aria-label={label}
       aria-pressed={pressed}
-      title={label}
+      data-tip={label}
       onClick={onClick}
       className={`grid size-6 place-items-center border-2 border-[#111] ${pressed ? 'bg-[#111] text-white' : 'bg-white/80 text-[#111]'} hover:-translate-x-px hover:-translate-y-px hover:shadow-[2px_2px_0_0_#111] active:translate-0 active:shadow-none`}
     >

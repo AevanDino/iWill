@@ -1,6 +1,16 @@
 @import 'tailwindcss';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+/* Calendar and timer side by side, or stacked when there isn't room for both (see src/lib/layout.ts). */
+@custom-variant side (@media (orientation: landscape) and (min-width: 800px));
+@custom-variant stacked {
+  @media (orientation: portrait) {
+    @slot;
+  }
+  @media (max-width: 799.98px) {
+    @slot;
+  }
+}
 
 :root {
   --bg: #fff7e0;
@@ -164,6 +174,31 @@ body {
   background-image: repeating-linear-gradient(-45deg, rgb(17 17 17 / 0.14) 0 6px, transparent 6px 12px);
 }
 
+/*
+ * The block lane on the timeline. When the day has slivers (blocks too short
+ * to hold text), the lane narrows to make room for their flags on the right.
+ */
+.timeline-content {
+  --lane-right: 0.75rem;
+}
+.timeline-content[data-rail] {
+  --lane-right: 6.5rem;
+}
+@container planner (min-width: 40rem) {
+  .timeline-content {
+    --lane-right: 1.25rem;
+  }
+  .timeline-content[data-rail] {
+    --lane-right: 10rem;
+  }
+}
+.lane {
+  position: absolute;
+  left: 64px;
+  right: var(--lane-right);
+  transition: right 200ms ease;
+}
+
 /* Hold-to-switch countdown under the drag time chip. */
 @keyframes hold-fill {
   from {
@@ -199,14 +234,16 @@ body {
 .timer-dock {
   flex-shrink: 0;
 }
-@media (orientation: landscape) {
+/* The calendar keeps at least 480px (its header's width) beside the timer, or 300px above it. */
+@media (orientation: landscape) and (min-width: 800px) {
   .timer-dock {
-    width: clamp(320px, calc(var(--split, 0.7) * 100%), calc(100% - 320px));
+    width: clamp(320px, calc(var(--split, 0.7) * 100%), calc(100% - 480px));
   }
 }
-@media (orientation: portrait) {
+@media (orientation: portrait), (max-width: 799.98px) {
   .timer-dock {
-    height: clamp(240px, calc(var(--split, 0.7) * 100%), calc(100% - 150px));
+    /* On very short screens the calendar's minimum wins; fullscreen is there for the timer. */
+    height: max(140px, min(calc(100% - 300px), max(240px, calc(var(--split, 0.7) * 100%))));
   }
 }
 

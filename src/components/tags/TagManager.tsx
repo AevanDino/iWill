@@ -69,7 +69,7 @@ function ManagerDialog() {
               <div key={c.id} className="flex items-center gap-2">
                 <TagChip tag={c} />
                 {i === 0 && (
-                  <span className="label text-muted" title="New blocks get this tag">
+                  <span className="label text-muted" data-tip="New blocks get this tag">
                     Default
                   </span>
                 )}
@@ -81,7 +81,7 @@ function ManagerDialog() {
                   type="button"
                   className="btn btn-icon hover:bg-hot! hover:text-white!"
                   aria-label={`Delete ${c.name}`}
-                  title={categories.length === 1 ? 'You need at least one tag' : `Delete ${c.name}`}
+                  data-tip={categories.length === 1 ? 'You need at least one tag' : `Delete ${c.name}`}
                   disabled={categories.length === 1}
                   onClick={() => start('delete', c.id)}
                 >

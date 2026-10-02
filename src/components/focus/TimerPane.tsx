@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { phasePalette } from '../../lib/color'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import {
   estimatePomodoros,
@@ -15,7 +16,7 @@ import { unlockAudio } from '../../lib/sound'
 import { clamp, formatDuration, formatTime, minutesOfDay } from '../../lib/time'
 import { useStore } from '../../store/appStore'
 import { useClock } from '../../store/clock'
-import { usePomodoro } from '../../store/pomodoroStore'
+import { projectSession, usePomodoro } from '../../store/pomodoroStore'
 import { useUi } from '../../store/uiStore'
 import type { TimeBlock } from '../../types'
 import { CollapseIcon, ExpandIcon, GearIcon, PlayIcon } from '../icons'
@@ -42,12 +43,33 @@ export function TimerPane() {
   const config = usePomodoro((s) => s.config)
   const role = usePomodoro((s) => s.role)
   const now = useClock((s) => s.now)
+  const block = useStore((s) => s.blocks.find((b) => b.id === session?.blockId))
+  const blockColor = useStore((s) => s.categories.find((c) => c.id === block?.categoryId)?.color)
+  const landing = useUi((s) => (session?.blockId ? s.landing?.[session.blockId] : undefined))
+  // Theme the pane from the block's tag colour; a quick focus keeps the default red/teal/grey.
+  const palette = useMemo(() => (blockColor ? phasePalette(blockColor) : null), [blockColor])
   const [optionsOpen, setOptionsOpen] = useState(false)
   useTimerKeys()
   if (!session) return null
+  const ink = palette
+    ? { focus: palette.onFocus, 'short-break': palette.onShortBreak, 'long-break': palette.onLongBreak }[session.phase]
+    : INK
+  const themeVars = palette && {
+    '--phase-focus': palette.focus,
+    '--phase-short': palette.shortBreak,
+    '--phase-long': palette.longBreak,
+  }
 
-  const left = remainingMs(session, now)
-  const pct = clamp(progress(session, now), 0, 1)
+  // While the linked block is being dragged, show where the timer will end up.
+  const shown = landing && block ? projectSession(session, config, { ...block, ...landing }, now) : session
+  const left = remainingMs(shown, now)
+  // The edge bar shows how far through its block you are (live while it's dragged);
+  // a quick focus has no block, so it shows the Pomodoro instead.
+  const span = block && (landing ?? block)
+  const nowMin = minutesOfDay(new Date(now))
+  const pct = span
+    ? clamp((nowMin - span.start) / (span.end - span.start), 0, 1)
+    : clamp(progress(shown, now), 0, 1)
   const running = session.status === 'running'
 
   return (
@@ -62,15 +84,15 @@ export function TimerPane() {
         // (no `relative` here — it would beat `fixed` and collapse the fullscreen pane)
         fullscreen ? 'fixed inset-0 z-50' : 'timer-dock relative',
       ].join(' ')}
-      style={{ background: PHASE_COLOR[session.phase] }}
+      style={{ ...themeVars, background: PHASE_COLOR[session.phase] } as CSSProperties}
       aria-label="Pomodoro timer"
       aria-keyshortcuts="Space F Escape"
       inert={!isPresent}
     >
       {session.status === 'paused' && <div className="stripes pointer-events-none absolute inset-0" />}
-      <EdgeProgress pct={pct} />
+      <EdgeProgress pct={pct} color={blockColor} label={span ? 'Block progress' : 'Pomodoro progress'} />
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-4 landscape:pl-7 portrait:pt-6 sm:gap-4">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-4 pr-7 sm:gap-4">
         <div className="flex items-center gap-2">
           <SessionBadge session={session} config={config} />
           <div className="flex-1" />
@@ -79,7 +101,7 @@ export function TimerPane() {
             className="btn btn-icon bg-white! text-[#111]!"
             aria-expanded={optionsOpen}
             aria-label="Timer settings"
-            title="Timer settings"
+            data-tip="Timer settings"
             onClick={() => setOptionsOpen((o) => !o)}
           >
             <GearIcon size={16} />
@@ -89,14 +111,18 @@ export function TimerPane() {
             className="btn bg-white! px-2! text-sm text-[#111]!"
             aria-pressed={fullscreen}
             onClick={() => usePomodoro.getState().setFullscreen(!fullscreen)}
-            title={fullscreen ? 'Back to split view (Esc)' : 'Fullscreen timer (F)'}
+            data-tip={fullscreen ? 'Back to split view (Esc)' : 'Fullscreen timer (F)'}
           >
             {fullscreen ? <CollapseIcon size={16} /> : <ExpandIcon size={16} />}
             <span className="hidden @md:inline">{fullscreen ? 'Split view' : 'Fullscreen'}</span>
           </button>
         </div>
 
-        <div className="relative flex min-h-[4.5rem] flex-1 flex-col items-center justify-center gap-3 [container-type:size]">
+        {/* Sits straight on the phase colour, so it takes that colour's ink (white on dark tags). */}
+        <div
+          className="relative flex min-h-[4.5rem] flex-1 flex-col items-center justify-center gap-3 [container-type:size]"
+          style={{ color: ink }}
+        >
           <div className="relative">
             {running && config.pulse !== 'off' && (
               <div
@@ -104,7 +130,7 @@ export function TimerPane() {
                 aria-hidden="true"
                 className="tick-flash pointer-events-none absolute -inset-2"
                 style={{
-                  border: `${config.pulse === 'bold' ? 7 : 3}px solid ${INK}`,
+                  border: `${config.pulse === 'bold' ? 7 : 3}px solid currentColor`,
                   opacity: config.pulse === 'bold' ? 1 : 0.4,
                 }}
               />
@@ -113,12 +139,15 @@ export function TimerPane() {
               role="timer"
               aria-label={`${PHASE_LABEL[session.phase]}, ${formatClock(left)} remaining${session.status === 'paused' ? ', paused' : ''}`}
               className="font-mono leading-[0.85] font-black tracking-tighter tabular-nums"
-              style={{ fontSize: 'min(30cqw, 62cqh)', textShadow: '0.045em 0.045em 0 rgb(255 255 255 / 0.55)' }}
+              style={{
+                fontSize: 'min(30cqw, 62cqh)',
+                textShadow: `0.045em 0.045em 0 ${ink === INK ? 'rgb(255 255 255 / 0.55)' : 'rgb(0 0 0 / 0.3)'}`,
+              }}
             >
               {formatClock(left)}
             </div>
             {session.status === 'paused' && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-6 border-[4px] border-[#111] bg-white px-3 py-0.5 text-xl font-black tracking-widest uppercase shadow-[5px_5px_0_0_#111]">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-6 border-[4px] border-[#111] bg-white px-3 py-0.5 text-xl font-black tracking-widest text-[#111] uppercase shadow-[5px_5px_0_0_#111]">
                 Paused
               </div>
             )}
@@ -171,19 +200,26 @@ function useTimerKeys() {
   }, [])
 }
 
-/** Session progress as a stark bar along the pane's edge (left in landscape, top in portrait). */
-function EdgeProgress({ pct }: { pct: number }) {
+/**
+ * Progress as a bar down the pane's right edge, away from the calendar:
+ * through the linked block, or through the Pomodoro for a quick focus. The
+ * elapsed part is a light tint of the block's colour (near-white without one).
+ */
+function EdgeProgress({ pct, color, label }: { pct: number; color: string | undefined; label: string }) {
   return (
     <div
-      className="pointer-events-none absolute z-20 border-[#111] bg-white/45 landscape:inset-y-0 landscape:left-0 landscape:w-3.5 landscape:border-r-[3px] portrait:inset-x-0 portrait:top-0 portrait:h-3 portrait:border-b-[3px]"
+      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-3 bg-black/15"
       role="progressbar"
-      aria-label="Session progress"
+      aria-label={label}
       aria-valuenow={Math.round(pct * 100)}
       aria-valuemin={0}
       aria-valuemax={100}
       style={{ '--p': pct } as CSSProperties}
     >
-      <div className="bg-[#111] transition-[width,height] duration-1000 ease-linear landscape:h-[calc(var(--p)*100%)] landscape:w-full portrait:h-full portrait:w-[calc(var(--p)*100%)]" />
+      <div
+        className="h-[calc(var(--p)*100%)] w-full transition-[height] duration-1000 ease-linear"
+        style={{ background: color ? `color-mix(in oklab, ${color} 55%, white)` : 'rgb(255 255 255 / 0.85)' }}
+      />
     </div>
   )
 }
@@ -212,7 +248,7 @@ function CycleDots({ session, config }: { session: PomodoroSession; config: Pomo
         return (
           <span
             key={i}
-            className={`size-4 border-[3px] border-[#111] ${done ? 'bg-[#111]' : current ? 'bg-white' : ''} ${current && session.status === 'running' ? 'blink' : ''}`}
+            className={`size-4 border-[3px] border-current ${done ? 'bg-current' : current ? 'bg-white' : ''} ${current && session.status === 'running' ? 'blink' : ''}`}
           />
         )
       })}
@@ -224,7 +260,10 @@ function CycleDots({ session, config }: { session: PomodoroSession; config: Pomo
 /** Compact summary of the block this session is attached to. */
 function BlockSummary({ session }: { session: PomodoroSession }) {
   const nowMin = useClock((s) => minutesOfDay(new Date(s.now)))
-  const block = useStore((s) => s.blocks.find((b) => b.id === session.blockId))
+  const stored = useStore((s) => s.blocks.find((b) => b.id === session.blockId))
+  const landing = useUi((s) => s.landing?.[session.blockId])
+  // Mid-drag, describe the block where it will land.
+  const block = stored && landing ? { ...stored, ...landing } : stored
   const category = useStore((s) => s.categories.find((c) => c.id === block?.categoryId))
   const blocks = useStore((s) => s.blocks)
   const config = usePomodoro((s) => s.config)
@@ -379,7 +418,7 @@ function Controls({ session }: { session: PomodoroSession }) {
         <button type="button" className={ghost} onClick={p.skip}>
           Skip ⏭
         </button>
-        <button type="button" className={ghost} onClick={p.end} title="Stop the timer — your calendar isn't touched">
+        <button type="button" className={ghost} onClick={p.end} data-tip="Stop the timer — your calendar isn't touched">
           End Pomodoro
         </button>
       </div>
@@ -544,7 +583,7 @@ function CycleOptions({ config, onClose }: { config: PomodoroConfig; onClose(): 
       animate={{ y: 0 }}
       exit={{ y: '-100%' }}
       transition={{ duration: 0.18, ease: 'linear' }}
-      className="absolute inset-x-0 top-0 z-40 max-h-full overflow-y-auto border-b-[4px] border-line bg-paper p-4 text-ink shadow-[0_6px_0_0_#111] landscape:pl-7"
+      className="absolute inset-x-0 top-0 z-40 max-h-full overflow-y-auto border-b-[4px] border-line bg-paper p-4 text-ink shadow-[0_6px_0_0_#111]"
       role="dialog"
       aria-label="Timer settings"
     >

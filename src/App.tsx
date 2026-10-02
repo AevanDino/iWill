@@ -6,6 +6,7 @@ import { RoutineDeck } from './components/RoutineDeck'
 import { SelectionBar } from './components/SelectionBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { TagManager } from './components/tags/TagManager'
+import { TooltipLayer } from './components/Tooltip'
 import { Timeline } from './components/Timeline'
 import { FocusOffer } from './components/focus/FocusOffer'
 import { SplitDivider } from './components/focus/SplitDivider'
@@ -25,9 +26,9 @@ export default function App() {
   useTheme()
 
   return (
-    // Calendar and timer side by side in landscape, stacked (calendar on top) in portrait.
+    // Calendar and timer side by side when there's room for both, stacked (calendar on top) otherwise.
     <div
-      className="flex h-dvh flex-col landscape:flex-row"
+      className="flex h-dvh flex-col side:flex-row"
       data-split-root
       style={{ '--split': split } as CSSProperties}
     >
@@ -49,6 +50,7 @@ export default function App() {
       <TagManager />
       <FocusOffer />
       <Toast />
+      <TooltipLayer />
     </div>
   )
 }
@@ -97,7 +99,7 @@ function Toast() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4 landscape:bottom-5 portrait:top-16"
+      className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4 side:bottom-5 stacked:top-16"
       aria-live="polite"
     >
       <AnimatePresence mode="popLayout">

@@ -1,10 +1,11 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { findFreeSlot } from '../lib/collision'
-import { formatDateLabel, minutesOfDay, shiftDate, toDateKey } from '../lib/time'
+import { ceilTo, formatDateLabel, minutesOfDay, shiftDate, toDateKey } from '../lib/time'
 import { boundsOf, useStore } from '../store/appStore'
 import { useClock } from '../store/clock'
 import { usePomodoro } from '../store/pomodoroStore'
 import { useUi } from '../store/uiStore'
-import { ChevronLeftIcon, ChevronRightIcon, GearIcon, PlusIcon, SelectIcon, StackIcon } from './icons'
+import { ChevronLeftIcon, ChevronRightIcon, GearIcon, MoreIcon, PlusIcon, SelectIcon, StackIcon } from './icons'
 import { failureMessage } from './messages'
 
 export function Header() {
@@ -19,7 +20,7 @@ export function Header() {
     const store = useStore.getState()
     const bounds = boundsOf(store.settings)
     const now = new Date()
-    const from = date === toDateKey(now) ? Math.ceil(minutesOfDay(now) / 15) * 15 : Math.max(bounds.start, 9 * 60)
+    const from = date === toDateKey(now) ? ceilTo(minutesOfDay(now), store.settings.grid) : Math.max(bounds.start, 9 * 60)
     const start = findFreeSlot(store.blocks, 30, from, bounds) ?? Math.min(from, bounds.end - 30)
     const { result, id } = store.addBlock({ start, end: start + 30 })
     if (result.ok) useUi.getState().edit(id)
@@ -27,7 +28,8 @@ export function Header() {
   }
 
   return (
-    <header className="relative z-30 flex items-center gap-1.5 border-b-[3px] border-line bg-paper px-2 py-2.5 @xl/planner:gap-3 @xl/planner:px-5">
+    // Below 30rem the header can't fit every button, so the less frequent ones move into the ⋯ menu.
+    <header className="relative z-30 flex items-center gap-1 border-b-[3px] border-line bg-paper px-2 py-2.5 @min-[30rem]/planner:gap-1.5 @xl/planner:gap-3 @xl/planner:px-5">
       <div
         className="shrink-0 -rotate-2 border-[3px] border-[#111] bg-accent px-1.5 py-0.5 text-lg font-black tracking-tighter text-[#111] shadow-[3px_3px_0_0_#111] select-none @xl/planner:px-2 @xl/planner:text-2xl"
         aria-label="iWill"
@@ -44,7 +46,7 @@ export function Header() {
           className="btn min-w-0 truncate px-2 text-xs @xl/planner:min-w-[7.5rem] @xl/planner:text-sm"
           onClick={() => setDate(today)}
           aria-label={`${formatDateLabel(date, today)} — jump to today`}
-          title="Jump to today"
+          data-tip="Jump to today"
         >
           {formatDateLabel(date, today)}
         </button>
@@ -57,31 +59,34 @@ export function Header() {
 
       <Clock />
 
-      <FocusButton />
       <button type="button" className="btn bg-accent! text-[#111]!" onClick={addBlock} aria-label="Add block">
         <PlusIcon size={16} />
         <span className="@max-xl/planner:hidden">Block</span>
       </button>
-      <button
-        type="button"
-        className="btn btn-icon"
-        aria-pressed={selecting}
-        aria-label="Select blocks"
-        title="Select several blocks to move or edit together"
-        onClick={() => (selecting ? useUi.getState().stopSelecting() : useUi.getState().startSelecting())}
-      >
-        <SelectIcon size={16} />
-      </button>
-      <button
-        type="button"
-        className="btn"
-        aria-pressed={deckOpen}
-        onClick={() => useUi.getState().toggleDeck()}
-        aria-label="Routine deck"
-      >
-        <StackIcon size={16} />
-        <span className="@max-xl/planner:hidden">Routines</span>
-      </button>
+      <div className="hidden items-center gap-1.5 @min-[30rem]/planner:flex @xl/planner:gap-3">
+        <FocusButton />
+        <button
+          type="button"
+          className="btn btn-icon"
+          aria-pressed={selecting}
+          aria-label="Select blocks"
+          data-tip="Select several blocks to move or edit together"
+          onClick={() => (selecting ? useUi.getState().stopSelecting() : useUi.getState().startSelecting())}
+        >
+          <SelectIcon size={16} />
+        </button>
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={deckOpen}
+          onClick={() => useUi.getState().toggleDeck()}
+          aria-label="Routine deck"
+        >
+          <StackIcon size={16} />
+          <span className="@max-xl/planner:hidden">Routines</span>
+        </button>
+      </div>
+      <MoreMenu />
       <button
         type="button"
         className="btn btn-icon"
@@ -95,6 +100,94 @@ export function Header() {
   )
 }
 
+/** The actions that don't fit a narrow header: quick focus, select mode and the routine deck. */
+function MoreMenu() {
+  const [open, setOpen] = useState(false)
+  const hasSession = usePomodoro((s) => !!s.session)
+  const deckOpen = useUi((s) => s.deckOpen)
+  const selecting = useUi((s) => s.selecting)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: globalThis.PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const run = (action: () => void) => () => {
+    setOpen(false)
+    action()
+  }
+  const ui = () => useUi.getState()
+
+  return (
+    <div ref={ref} className="relative @min-[30rem]/planner:hidden">
+      <button
+        type="button"
+        className="btn btn-icon"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="More actions"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <MoreIcon size={16} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute top-full right-0 z-40 mt-2 w-52 border-[3px] border-line bg-paper p-1.5 shadow-brutal-lg">
+          {!hasSession && (
+            <MenuItem icon={<span aria-hidden="true">🍅</span>} onClick={run(() => usePomodoro.getState().openFocus())}>
+              Quick focus
+            </MenuItem>
+          )}
+          <MenuItem
+            icon={<SelectIcon size={16} />}
+            checked={selecting}
+            onClick={run(() => (selecting ? ui().stopSelecting() : ui().startSelecting()))}
+          >
+            Select blocks
+          </MenuItem>
+          <MenuItem icon={<StackIcon size={16} />} checked={deckOpen} onClick={run(() => ui().toggleDeck())}>
+            Routines
+          </MenuItem>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuItem({
+  icon,
+  checked,
+  onClick,
+  children,
+}: {
+  icon: ReactNode
+  checked?: boolean
+  onClick(): void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+      aria-checked={checked}
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-sm font-black hover:bg-accent hover:text-[#111] ${checked ? 'bg-accent text-[#111]' : ''}`}
+    >
+      <span className="grid w-5 place-items-center">{icon}</span>
+      {children}
+    </button>
+  )
+}
+
 /** Quick focus: a Pomodoro not tied to any block. Hidden while the timer pane is already showing. */
 function FocusButton() {
   const hasSession = usePomodoro((s) => !!s.session)
@@ -105,7 +198,7 @@ function FocusButton() {
       className="btn"
       onClick={() => usePomodoro.getState().openFocus()}
       aria-label="Quick focus"
-      title="Quick focus — a Pomodoro not tied to a block"
+      data-tip="Quick focus — a Pomodoro not tied to a block"
     >
       <span aria-hidden="true">🍅</span>
       <span className="@max-xl/planner:hidden">Focus</span>

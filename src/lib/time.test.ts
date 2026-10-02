@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { formatDuration, formatTime, parseTime, shiftDate, slotSpan, snap } from './time'
+import { ceilTo, formatDuration, formatTime, parseTime, shiftDate, slotSpan, snap } from './time'
 
 describe('time helpers', () => {
-  it('snaps to the 15-minute grid', () => {
-    expect(snap(7)).toBe(0)
-    expect(snap(8)).toBe(15)
-    expect(snap(592)).toBe(585)
+  it('snaps to the chosen grid', () => {
+    expect(snap(7, 15)).toBe(0)
+    expect(snap(8, 15)).toBe(15)
+    expect(snap(592, 15)).toBe(585)
+    expect(snap(592, 5)).toBe(590)
+    expect(snap(593, 5)).toBe(595)
+    expect(snap(594, 10)).toBe(590)
+    expect(ceilTo(541, 5)).toBe(545)
+    expect(ceilTo(540, 10)).toBe(540)
   })
 
   it('formats and parses clock times', () => {
@@ -31,13 +36,16 @@ describe('time helpers', () => {
   it('spans the slots between a press and a drag, in either direction', () => {
     const day = { start: 360, end: 1440 }
     // press and release in the same slot → that one slot
-    expect(slotSpan(545, 551, day)).toEqual({ start: 540, end: 555 })
+    expect(slotSpan(545, 551, day, 15)).toEqual({ start: 540, end: 555 })
     // dragging down includes the slot under the pointer
-    expect(slotSpan(545, 631, day)).toEqual({ start: 540, end: 645 })
+    expect(slotSpan(545, 631, day, 15)).toEqual({ start: 540, end: 645 })
     // dragging up keeps the pressed slot as the bottom
-    expect(slotSpan(545, 482, day)).toEqual({ start: 480, end: 555 })
+    expect(slotSpan(545, 482, day, 15)).toEqual({ start: 480, end: 555 })
     // never leaves the day
-    expect(slotSpan(370, 100, day)).toEqual({ start: 360, end: 375 })
-    expect(slotSpan(1430, 2000, day)).toEqual({ start: 1425, end: 1440 })
+    expect(slotSpan(370, 100, day, 15)).toEqual({ start: 360, end: 375 })
+    expect(slotSpan(1430, 2000, day, 15)).toEqual({ start: 1425, end: 1440 })
+    // finer grids select finer slots
+    expect(slotSpan(541, 541, day, 5)).toEqual({ start: 540, end: 545 })
+    expect(slotSpan(541, 562, day, 10)).toEqual({ start: 540, end: 570 })
   })
 })

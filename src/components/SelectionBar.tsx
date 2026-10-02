@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { connectedChain } from '../lib/collision'
-import { SNAP } from '../lib/time'
 import { useStore } from '../store/appStore'
 import { useUi } from '../store/uiStore'
 import { ArrowDownIcon, ArrowUpIcon, CheckIcon, LockIcon, TrashIcon, UnlockIcon } from './icons'
@@ -15,6 +14,7 @@ export function SelectionBar() {
 function Bar() {
   const selected = useUi((s) => s.selected)
   const blocks = useStore((s) => s.blocks)
+  const grid = useStore((s) => s.settings.grid)
   const chosen = blocks.filter((b) => selected.has(b.id))
   const ids = chosen.map((b) => b.id)
   const n = ids.length
@@ -51,7 +51,7 @@ function Bar() {
           type="button"
           className="btn px-2.5! py-1! text-xs"
           disabled={n === 0 || connected.size === n}
-          title="Also select every block touching these"
+          data-tip="Also select every block touching these"
           onClick={() => ui().setSelected(connected)}
         >
           Connected
@@ -61,10 +61,10 @@ function Bar() {
         </button>
       </div>
       <div className="flex items-center gap-1.5">
-        <button type="button" className={icon} disabled={n === 0} aria-label={`Move up ${SNAP} minutes`} title={`Up ${SNAP}m`} onClick={() => nudge(-SNAP)}>
+        <button type="button" className={icon} disabled={n === 0} aria-label={`Move up ${grid} minutes`} data-tip={`Up ${grid}m`} onClick={() => nudge(-grid)}>
           <ArrowUpIcon size={16} />
         </button>
-        <button type="button" className={icon} disabled={n === 0} aria-label={`Move down ${SNAP} minutes`} title={`Down ${SNAP}m`} onClick={() => nudge(SNAP)}>
+        <button type="button" className={icon} disabled={n === 0} aria-label={`Move down ${grid} minutes`} data-tip={`Down ${grid}m`} onClick={() => nudge(grid)}>
           <ArrowDownIcon size={16} />
         </button>
         <div className="flex-1" />
@@ -74,7 +74,7 @@ function Bar() {
           disabled={n === 0}
           aria-pressed={allLocked}
           aria-label={allLocked ? 'Unlock all' : 'Lock all'}
-          title={allLocked ? 'Unlock all' : 'Lock all'}
+          data-tip={allLocked ? 'Unlock all' : 'Lock all'}
           onClick={() => useStore.getState().setMany(ids, { locked: !allLocked })}
         >
           {allLocked ? <LockIcon size={16} /> : <UnlockIcon size={16} />}
@@ -85,7 +85,7 @@ function Bar() {
           disabled={n === 0}
           aria-pressed={allDone}
           aria-label={allDone ? 'Mark all not done' : 'Mark all done'}
-          title={allDone ? 'Mark all not done' : 'Mark all done'}
+          data-tip={allDone ? 'Mark all not done' : 'Mark all done'}
           onClick={() => useStore.getState().setMany(ids, { completed: !allDone })}
         >
           <CheckIcon size={16} />
@@ -95,7 +95,7 @@ function Bar() {
           className={`${icon} hover:bg-hot! hover:text-white!`}
           disabled={n === 0}
           aria-label="Delete selected"
-          title="Delete selected"
+          data-tip="Delete selected"
           onClick={remove}
         >
           <TrashIcon size={16} />

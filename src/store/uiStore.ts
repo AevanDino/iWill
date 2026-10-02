@@ -20,6 +20,11 @@ interface UiState {
   routineDrag: RoutineDrag | null
   /** Blocks that were just shoved by a cascade (e.g. a cap) and should bounce into place. */
   bouncing: ReadonlySet<string>
+  /**
+   * While a block is dragged on the timeline: where each affected block would
+   * land on release. Lets the timer pane and Now strip preview the change.
+   */
+  landing: Readonly<Record<string, { start: Minutes; end: Minutes }>> | null
   /** Registered by the timeline: maps a viewport point to minutes, or null if outside it. */
   probe: ((x: number, y: number) => Minutes | null) | null
 
@@ -35,6 +40,7 @@ interface UiState {
   setRoutineDrag(drag: RoutineDrag | null): void
   bounce(ids: string[]): void
   setProbe(probe: UiState['probe']): void
+  setLanding(landing: UiState['landing']): void
 }
 
 let toastId = 0
@@ -50,6 +56,7 @@ export const useUi = create<UiState>()((set) => ({
   routineDrag: null,
   bouncing: new Set(),
   probe: null,
+  landing: null,
 
   edit: (editingId) => set({ editingId }),
   toggleDeck: (open) => set((s) => ({ deckOpen: open ?? !s.deckOpen })),
@@ -72,4 +79,5 @@ export const useUi = create<UiState>()((set) => ({
     setTimeout(() => set((s) => (s.bouncing === bouncing ? { bouncing: new Set() } : s)), 1200)
   },
   setProbe: (probe) => set({ probe }),
+  setLanding: (landing) => set({ landing }),
 }))

@@ -67,6 +67,26 @@ describe('pomodoro store', () => {
     expect(pomo.getState().session!.durationMs).toBe(pomo.getState().config.focusMin * MIN)
   })
 
+  it('moving or resizing the focused block moves the end of its focus', async () => {
+    const pomo = make()
+    await pomo.getState().hydrate()
+    const id = addBlockNow(15) // ~10 min left: a fitted ~10-minute focus
+    await pomo.getState().startFor(id)
+    const before = pomo.getState().session!.endsAt!
+    const b = () => app.getState().blocks.find((x) => x.id === id)!
+
+    // stretch the block by 5 minutes: the focus ends 5 minutes later
+    app.getState().moveBlock(id, b().start, b().end + 5)
+    expect(Math.abs(pomo.getState().session!.endsAt! - (before + 5 * MIN))).toBeLessThan(1500)
+
+    // move it away from now: no longer running, so the focus gets its full length back
+    const startedAt = pomo.getState().session!.phaseStartedAt!
+    const away = minutesOfDay(new Date()) < 12 * 60 ? 120 : -120 // whichever way the day has room
+    expect(app.getState().moveBlock(id, b().start + away, b().end + away).ok).toBe(true)
+    expect(pomo.getState().session!.durationMs).toBe(pomo.getState().config.focusMin * MIN)
+    expect(pomo.getState().session!.endsAt).toBe(startedAt + pomo.getState().config.focusMin * MIN)
+  })
+
   it('auto-starts the break when configured', async () => {
     const pomo = make()
     await pomo.getState().hydrate()

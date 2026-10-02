@@ -53,6 +53,8 @@ export interface Settings {
   dayStartHour: number
   dayEndHour: number
   notifications: boolean
+  /** Snapping grid in minutes for drags, nudges and new blocks. */
+  grid: 5 | 10 | 15
 }
 
 /** A single position change produced by the collision engine. */

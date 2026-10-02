@@ -10,13 +10,32 @@ import type { TimeBlock } from '../types'
 import { useStore } from './appStore'
 import { useUi } from './uiStore'
 
+/** Time left in `block` if it's running right now, else null. */
+function blockLeftMs(block: TimeBlock | undefined, now: number): number | null {
+  const nowDate = new Date(now)
+  if (!block || block.completed || block.date !== toDateKey(nowDate)) return null
+  const nowMin = minutesOfDay(nowDate)
+  if (nowMin < block.start || nowMin >= block.end) return null
+  return (block.end - nowMin) * 60_000
+}
+
+/**
+ * What the session would look like if `block` had these times: used to
+ * preview the timer live while the block is being dragged.
+ */
+export function projectSession(
+  s: P.PomodoroSession,
+  config: P.PomodoroConfig,
+  block: TimeBlock,
+  now: number,
+): P.PomodoroSession {
+  return P.followBlock(s, config, blockLeftMs(block, now), now)
+}
+
 /** If `block` is running right now, shorten an unstarted focus to the time it has left. */
 function fitToActiveBlock(s: P.PomodoroSession, block: TimeBlock | undefined, now: number): P.PomodoroSession {
-  const nowDate = new Date(now)
-  if (!block || block.completed || block.date !== toDateKey(nowDate)) return s
-  const nowMin = minutesOfDay(nowDate)
-  if (nowMin < block.start || nowMin >= block.end) return s
-  return P.fitToBlock(s, (block.end - nowMin) * 60_000)
+  const left = blockLeftMs(block, now)
+  return left == null ? s : P.fitToBlock(s, left)
 }
 
 /** `viewer`: a session exists but another tab is running it. */
@@ -58,6 +77,8 @@ export interface PomodoroState {
   updateConfig(patch: Partial<P.PomodoroConfig>): void
   tick(now: number): void
   blockStarted(blockId: string): void
+  /** The day's blocks changed: keep a focus in step with its block (see `P.followBlock`). */
+  blocksChanged(): void
   acceptOffer(): void
   dismissOffer(): void
 }
@@ -122,7 +143,7 @@ export function createPomodoroStore({
   const dismissedOffers = new Set<string>()
   const warnedEnding = new Set<string>()
 
-  return create<PomodoroState>()((set, get) => {
+  const store = create<PomodoroState>()((set, get) => {
     const isLive = (s: P.PomodoroSession | null | undefined): s is P.PomodoroSession => !!s && s.status !== 'ended'
 
     function syncFocusBlock(s: P.PomodoroSession | null) {
@@ -449,6 +470,18 @@ export function createPomodoroStore({
           playTick(config.volume)
       },
 
+      blocksChanged() {
+        const { session: s, role, config } = get()
+        if (!s || role !== 'owner' || !s.blockId) return
+        const { blocks, date } = app.getState()
+        const block = blocks.find((b) => b.id === s.blockId)
+        // Another day on screen: we can't see the block, which isn't the same as it being gone.
+        if (!block && date !== s.date) return
+        const now = Date.now()
+        const next = P.followBlock(s, config, blockLeftMs(block, now), now)
+        if (next !== s) commit(next)
+      },
+
       blockStarted(blockId) {
         const { session, config } = get()
         if (config.autoFocus === 'off' || dismissedOffers.has(blockId)) return
@@ -467,6 +500,12 @@ export function createPomodoroStore({
       },
     }
   })
+
+  // Moving or resizing the focused block moves the end of its focus too.
+  app.subscribe((state, prev) => {
+    if (state.blocks !== prev.blocks) store.getState().blocksChanged()
+  })
+  return store
 }
 
 export const usePomodoro = createPomodoroStore()

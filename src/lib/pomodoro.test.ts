@@ -6,6 +6,7 @@ import {
   estimatePomodoros,
   extraBreak,
   fitToBlock,
+  followBlock,
   formatClock,
   pause,
   recover,
@@ -146,5 +147,36 @@ describe('pomodoro timer', () => {
     expect(fitToBlock(running, 10 * MIN)).toBe(running)
     const brk = advance(fresh(), C, T0, false)
     expect(fitToBlock(brk, MIN)).toBe(brk)
+  })
+
+  describe('followBlock', () => {
+    // a 5-minute focus fitted to a block, 2 minutes in
+    const fitted = () => start(fitToBlock(fresh(), 5 * MIN), T0)
+    const at = T0 + 2 * MIN
+
+    it('grows a cut-short focus when its block is stretched, up to the full length', () => {
+      const s = followBlock(fitted(), C, 10 * MIN, at)
+      expect(s).toMatchObject({ durationMs: 12 * MIN, endsAt: at + 10 * MIN })
+      expect(followBlock(fitted(), C, 60 * MIN, at).durationMs).toBe(C.focusMin * MIN)
+    })
+
+    it('shrinks a focus that would outlast its block, never below the time already focused', () => {
+      const long = start(fresh(), T0)
+      expect(followBlock(long, C, MIN, at)).toMatchObject({ durationMs: 3 * MIN, endsAt: at + MIN })
+      expect(followBlock(long, C, 0, at)).toMatchObject({ durationMs: 2 * MIN, endsAt: at })
+    })
+
+    it('gives the full length back once the block is no longer running', () => {
+      expect(followBlock(fitted(), C, null, at)).toMatchObject({ durationMs: C.focusMin * MIN, endsAt: T0 + C.focusMin * MIN })
+    })
+
+    it('follows while paused, and leaves breaks and tiny jitter alone', () => {
+      const paused = pause(fitted(), at)
+      expect(followBlock(paused, C, 10 * MIN, at)).toMatchObject({ status: 'paused', durationMs: 12 * MIN, remainingMs: 10 * MIN })
+      const brk = advance(fresh(), C, T0, true)
+      expect(followBlock(brk, C, MIN, at)).toBe(brk)
+      const f = fitted()
+      expect(followBlock(f, C, 3 * MIN + 300, at)).toBe(f)
+    })
   })
 })

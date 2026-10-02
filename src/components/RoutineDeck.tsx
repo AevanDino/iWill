@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { findFreeSlot } from '../lib/collision'
 import { inkOn } from '../lib/color'
-import { formatDuration, formatTime, minutesOfDay, snap, toDateKey } from '../lib/time'
+import { ceilTo, formatDuration, formatTime, minutesOfDay, snap, toDateKey } from '../lib/time'
 import { boundsOf, routineDropStart, routineDuration, useStore } from '../store/appStore'
 import { useUi } from '../store/uiStore'
 import type { Category, RoutineStep, RoutineTemplate } from '../types'
@@ -122,7 +122,7 @@ function RoutineCard({
       ui.setRoutineDrag(null)
       if (minute == null) return
       const store = useStore.getState()
-      const start = routineDropStart(routine, minute, boundsOf(store.settings))
+      const start = routineDropStart(routine, minute, boundsOf(store.settings), store.settings.grid)
       const r = store.spawnRoutine(routine.id, start)
       ui.notify(r.ok ? `${routine.emoji ?? '✨'} ${routine.name} dropped at ${formatTime(start)}` : failureMessage(r))
     }
@@ -137,8 +137,9 @@ function RoutineCard({
     const store = useStore.getState()
     const bounds = boundsOf(store.settings)
     const now = new Date()
-    const from = store.date === toDateKey(now) ? Math.ceil(minutesOfDay(now) / 15) * 15 : Math.max(bounds.start, 9 * 60)
-    const slot = findFreeSlot(store.blocks, total, snap(from), bounds)
+    const grid = store.settings.grid
+    const from = store.date === toDateKey(now) ? ceilTo(minutesOfDay(now), grid) : Math.max(bounds.start, 9 * 60)
+    const slot = findFreeSlot(store.blocks, total, snap(from, grid), bounds)
     if (slot == null) {
       ui().notify('🌙 No free slot left today — drag it in to push things around')
       return
@@ -155,7 +156,7 @@ function RoutineCard({
       aria-label={`${routine.name}, ${formatDuration(total)}`}
     >
       <div className="flex items-start gap-2 p-3">
-        <div data-grip className="-ml-1 touch-none pt-0.5 text-muted" title="Drag onto the timeline">
+        <div data-grip className="-ml-1 touch-none pt-0.5 text-muted" data-tip="Drag onto the timeline">
           <GripIcon size={20} />
         </div>
         <div className="min-w-0 flex-1">
@@ -176,7 +177,7 @@ function RoutineCard({
             className="btn btn-icon bg-accent! text-[#111]!"
             onClick={addToNextSlot}
             aria-label={`Add ${routine.name} at the next free slot`}
-            title="Add at next free slot"
+            data-tip="Add at next free slot"
           >
             <PlusIcon size={16} />
           </button>
@@ -188,7 +189,7 @@ function RoutineCard({
             key={i}
             className="h-full border-line not-last:border-r-2"
             style={{ flexGrow: s.duration, background: colorOf(s.categoryId) }}
-            title={`${s.title} · ${formatDuration(s.duration)}`}
+            data-tip={`${s.title} · ${formatDuration(s.duration)}`}
           />
         ))}
       </div>

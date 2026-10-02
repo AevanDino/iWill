@@ -208,6 +208,34 @@ export function fitToBlock(s: PomodoroSession, blockLeftMs: number): PomodoroSes
   return durationMs === s.durationMs ? s : { ...s, durationMs, remainingMs: durationMs }
 }
 
+/**
+ * Keep a focus in step with its block after the block was moved or resized.
+ * While the block is running, the focus ends at whichever comes first: its
+ * full length, or the block's end (`blockLeftMs` from now). So a focus that
+ * was cut short grows back when the block is stretched, and one that would
+ * outlast a shrunk block is cut short. When the block isn't running any more
+ * (`blockLeftMs` null), the focus gets its full length back. Breaks and
+ * finished phases are left alone; time already focused is never taken back.
+ */
+export function followBlock(
+  s: PomodoroSession,
+  c: PomodoroConfig,
+  blockLeftMs: number | null,
+  now: number,
+): PomodoroSession {
+  if (s.phase !== 'focus' || (s.status !== 'idle' && s.status !== 'running' && s.status !== 'paused')) return s
+  const full = phaseMs('focus', c)
+  const elapsed = s.durationMs - remainingMs(s, now)
+  const target = blockLeftMs == null ? full : Math.min(full, elapsed + Math.max(0, blockLeftMs))
+  const durationMs = Math.round(Math.max(elapsed, s.status === 'idle' ? 1000 : 0, target))
+  // Ignore sub-second jitter from recomputing "now".
+  if (Math.abs(durationMs - s.durationMs) < 1000) return s
+  const left = durationMs - elapsed
+  return s.status === 'running'
+    ? { ...s, durationMs, endsAt: now + left, updatedAt: now }
+    : { ...s, durationMs, remainingMs: left, updatedAt: now }
+}
+
 /** Take (another) short break without advancing the cycle. */
 export function extraBreak(s: PomodoroSession, c: PomodoroConfig, now: number): PomodoroSession {
   // After a long break the cycle has already wrapped — make the next focus #1.

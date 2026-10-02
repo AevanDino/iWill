@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { IWillDB } from '../db/db'
 import { toDateKey } from '../lib/time'
-import { createAppStore } from './appStore'
+import { createAppStore, routineDropStart, routineToBlocks } from './appStore'
 
 const h = (hours: number, minutes = 0) => hours * 60 + minutes
 let dbCount = 0
@@ -171,6 +171,26 @@ describe('app store', () => {
       expect(store.getState().blocks.map((x) => x.id)).toEqual([b])
       await flush()
       expect(await database.blocks.where('date').equals('2020-01-01').primaryKeys()).toEqual([b])
+    })
+  })
+
+  describe('5-minute grid', () => {
+    it('allows 5-minute blocks and moves them like any other', async () => {
+      const { result, id } = store.getState().addBlock({ title: 'Break', start: h(10), end: h(10, 5) })
+      expect(result.ok).toBe(true)
+      store.getState().addBlock({ title: 'Next', start: h(10, 5), end: h(11) })
+      expect(store.getState().moveBlock(id, h(10, 30), h(10, 35)).ok).toBe(true)
+      const next = store.getState().blocks.find((b) => b.title === 'Next')!
+      expect([next.start, next.end]).toEqual([h(9, 35), h(10, 30)])
+      await flush()
+      expect((await database.blocks.get(id))!.end - (await database.blocks.get(id))!.start).toBe(5)
+    })
+
+    it('lays routines out on the chosen grid', () => {
+      const routine = { id: 'r', name: 'R', steps: [{ title: 'Breathe', categoryId: 'break', duration: 5 }] }
+      expect(routineToBlocks(routine, h(9, 7), '2020-01-01', 5)[0]).toMatchObject({ start: h(9, 5), end: h(9, 10) })
+      expect(routineToBlocks(routine, h(9, 7), '2020-01-01', 15)[0]).toMatchObject({ start: h(9), end: h(9, 5) })
+      expect(routineDropStart(routine, h(9, 12), { start: h(6), end: h(24) }, 10)).toBe(h(9, 10))
     })
   })
 })
