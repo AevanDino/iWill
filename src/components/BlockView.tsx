@@ -1,0 +1,327 @@
+import { memo, type KeyboardEvent, type PointerEvent } from 'react'
+import { motion } from 'motion/react'
+import { inkOn } from '../lib/color'
+import { CASCADE_SPRING, INSTANT, SNAP_SPRING } from '../lib/physics'
+import { clamp, formatDuration, formatTime, minutesOfDay, SNAP } from '../lib/time'
+import { useClock } from '../store/clock'
+import type { Category, TimeBlock } from '../types'
+import { CapIcon, CheckIcon, LockIcon, PlayIcon } from './icons'
+
+export type GripKind = 'move' | 'start' | 'end'
+
+export interface BlockActions {
+  gestureStart(e: PointerEvent<HTMLElement>, id: string, kind: GripKind): void
+  cap(id: string): void
+  startNow(id: string): void
+  focus(id: string): void
+  toggleLock(id: string): void
+  toggleComplete(id: string): void
+  nudge(id: string, dStart: number, dEnd: number): void
+  open(id: string): void
+  remove(id: string): void
+}
+
+interface Props {
+  block: TimeBlock
+  category: Category | undefined
+  top: number
+  height: number
+  mode: 'idle' | 'dragging' | 'displaced'
+  lifted: boolean
+  invalid: boolean
+  isActive: boolean
+  /** A Pomodoro session is attached — highlighted, but still editable. */
+  focused: boolean
+  isPast: boolean
+  canStart: boolean
+  /** Being dragged in slot-in mode: it passes through blocks instead of pushing them. */
+  slotting: boolean
+  /** Select mode is on: taps toggle selection, and the block's own buttons step aside. */
+  selecting: boolean
+  selected: boolean
+  actions: BlockActions
+}
+
+
+export const BlockView = memo(function BlockView({
+  block,
+  category,
+  top,
+  height,
+  mode,
+  lifted,
+  invalid,
+  isActive,
+  focused,
+  isPast,
+  canStart,
+  slotting,
+  selecting,
+  selected,
+  actions,
+}: Props) {
+  const pinned = block.locked
+  const color = category?.color ?? '#dddddd'
+  const compact = height < 50
+  const tiny = height < 22
+  const missed = isPast && !block.completed
+  const raised = mode === 'dragging' || lifted
+
+  const onPointerDown = (e: PointerEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button')) return
+    let grip = (target.closest('[data-grip]') as HTMLElement | null)?.dataset.grip as GripKind | undefined
+    if (!grip && !pinned && !selecting && e.pointerType !== 'touch') {
+      // The grip strips sit inside the border; treat the border band as edge too.
+      const rect = e.currentTarget.getBoundingClientRect()
+      const edge = Math.min(12, rect.height / 4)
+      if (e.clientY - rect.top <= edge) grip = 'start'
+      else if (rect.bottom - e.clientY <= edge) grip = 'end'
+    }
+    actions.gestureStart(e, block.id, grip ?? 'move')
+  }
+
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return
+    const step = SNAP
+    switch (e.key) {
+      case 'Enter':
+      case ' ':
+        e.preventDefault()
+        actions.open(block.id)
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        if (e.shiftKey) actions.nudge(block.id, 0, -step)
+        else actions.nudge(block.id, -step, -step)
+        break
+      case 'ArrowDown':
+        e.preventDefault()
+        if (e.shiftKey) actions.nudge(block.id, 0, step)
+        else actions.nudge(block.id, step, step)
+        break
+      case 'Delete':
+      case 'Backspace':
+        e.preventDefault()
+        actions.remove(block.id)
+        break
+    }
+  }
+
+  return (
+    <motion.div
+      role="button"
+      tabIndex={0}
+      aria-label={`${block.title}, ${formatTime(block.start)} to ${formatTime(block.end)}${block.completed ? ', done' : ''}${block.locked ? ', locked' : ''}${isActive ? ', in progress' : ''}${selecting && selected ? ', selected' : ''}`}
+      aria-pressed={selecting ? selected : undefined}
+      aria-keyshortcuts="Enter ArrowUp ArrowDown Shift+ArrowUp Shift+ArrowDown Delete"
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      initial={false}
+      animate={{
+        top,
+        height,
+        scale: raised ? 1.025 : 1,
+        rotate: mode === 'dragging' ? -0.8 : 0,
+        boxShadow: raised ? '8px 8px 0 0 var(--line)' : '4px 4px 0 0 var(--line)',
+      }}
+      transition={{
+        top: mode === 'dragging' ? INSTANT : mode === 'displaced' ? CASCADE_SPRING : SNAP_SPRING,
+        height: mode === 'dragging' ? INSTANT : SNAP_SPRING,
+        default: SNAP_SPRING,
+      }}
+      className={[
+        'absolute right-3 left-[64px] select-none overflow-hidden outline-none sm:right-5',
+        'focus-visible:ring-4 focus-visible:ring-accent focus-visible:ring-offset-2',
+        pinned ? 'cursor-pointer' : mode === 'dragging' ? 'cursor-grabbing' : 'cursor-grab',
+        isActive && mode === 'idle' ? 'is-active-block' : '',
+      ].join(' ')}
+      style={{
+        zIndex: raised ? 30 : isActive ? 12 : 10,
+        backgroundColor: color,
+        color: inkOn(color),
+        border: `3px ${block.locked ? 'double' : slotting ? 'dashed' : 'solid'} ${invalid ? 'var(--hot)' : 'var(--line)'}`,
+        borderWidth: block.locked ? 5 : 3,
+        filter: missed ? 'saturate(0.35)' : undefined,
+        outline: selected && selecting ? '4px solid var(--accent)' : focused ? '4px solid var(--phase-focus)' : undefined,
+        outlineOffset: 3,
+        opacity: block.completed && !isActive ? 0.72 : 1,
+      }}
+    >
+      {isActive && <LiquidFill start={block.start} end={block.end} color={color} />}
+      {(block.completed || missed) && <div className="hatched pointer-events-none absolute inset-0" />}
+
+      {!pinned && !selecting && (
+        <>
+          <div
+            data-grip="start"
+            className="absolute inset-x-0 top-0 z-20 h-2 cursor-ns-resize touch-none"
+            aria-hidden="true"
+          />
+          <div
+            data-grip="end"
+            className="group/grip absolute inset-x-0 bottom-0 z-20 flex h-2.5 cursor-ns-resize touch-none justify-center"
+            aria-hidden="true"
+          >
+            <span className="mt-0.5 h-1 w-8 bg-current opacity-25 group-hover/grip:opacity-70" />
+          </div>
+        </>
+      )}
+
+      <div
+        className={`relative z-10 flex h-full min-w-0 gap-2 px-2 ${compact ? 'items-center py-0' : 'items-start py-1.5'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div
+            className={`flex items-center gap-1.5 font-black leading-tight ${tiny ? 'text-[11px]' : 'text-sm'} ${block.completed ? 'line-through decoration-[3px]' : ''}`}
+          >
+            {selecting && (
+              <span
+                className={`grid size-4 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-[#111] text-white' : ''}`}
+                aria-hidden="true"
+              >
+                {selected && <CheckIcon size={10} />}
+              </span>
+            )}
+            {category?.emoji && <span aria-hidden="true">{category.emoji}</span>}
+            <span className="truncate">{block.title}</span>
+            {focused && (
+              <span className="shrink-0 border-2 border-[#111] bg-(--phase-focus) px-1 text-[10px] font-black tracking-wider uppercase">
+                Focus
+              </span>
+            )}
+            {!!block.pomodoros && (
+              <span className="shrink-0 font-mono text-[11px] font-bold" title={`${block.pomodoros} Pomodoros done`}>
+                🍅{block.pomodoros}
+              </span>
+            )}
+            {compact && !tiny && (
+              <span className="shrink-0 font-mono text-[11px] font-bold opacity-70">{formatTime(block.start)}</span>
+            )}
+          </div>
+          {!compact && (
+            <div className="mt-0.5 font-mono text-[11px] font-bold opacity-75">
+              {formatTime(block.start)}–{formatTime(block.end)} · {formatDuration(block.end - block.start)}
+            </div>
+          )}
+          {isActive && height >= 64 && <TimeLeft end={block.end} />}
+        </div>
+
+        {!tiny && mode !== 'dragging' && !selecting && (
+          <div className="flex shrink-0 items-center gap-1">
+            {block.locked && (
+              <SmallButton label="Unlock block" onClick={() => actions.toggleLock(block.id)}>
+                <LockIcon size={13} />
+              </SmallButton>
+            )}
+            {!block.completed && !focused && (isActive || canStart) && (
+              <SmallButton label={`Focus on ${block.title} with a Pomodoro`} onClick={() => actions.focus(block.id)}>
+                <span className="text-[12px] leading-none" aria-hidden="true">
+                  🍅
+                </span>
+              </SmallButton>
+            )}
+            {isActive ? (
+              <button
+                type="button"
+                onClick={() => actions.cap(block.id)}
+                className="flex items-center gap-1 border-[3px] border-[#111] bg-[#111] px-2 py-0.5 text-[11px] font-black tracking-wider text-white uppercase shadow-[2px_2px_0_0_#fff] hover:bg-[#ff3b3b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                title="Finish now and pull the rest of your day up"
+              >
+                <CapIcon size={12} /> Cap
+              </button>
+            ) : (
+              <>
+                {canStart && (
+                  <SmallButton label={`Start ${block.title} now`} onClick={() => actions.startNow(block.id)}>
+                    <PlayIcon size={12} />
+                  </SmallButton>
+                )}
+                <SmallButton
+                  label={block.completed ? 'Mark not done' : 'Mark done'}
+                  pressed={block.completed}
+                  onClick={() => actions.toggleComplete(block.id)}
+                >
+                  <CheckIcon size={13} />
+                </SmallButton>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+})
+
+function SmallButton({
+  label,
+  onClick,
+  pressed,
+  children,
+}: {
+  label: string
+  onClick(): void
+  pressed?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      onClick={onClick}
+      className={`grid size-6 place-items-center border-2 border-[#111] ${pressed ? 'bg-[#111] text-white' : 'bg-white/80 text-[#111]'} hover:-translate-x-px hover:-translate-y-px hover:shadow-[2px_2px_0_0_#111] active:translate-0 active:shadow-none`}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** Wave path spanning 200 units, period 20 — so a -50% translate loops seamlessly. */
+const WAVE = `M0 0 V4 Q5 8 10 4 ${Array.from({ length: 19 }, (_, i) => `T${(i + 2) * 10} 4`).join(' ')} V0 Z`
+
+/**
+ * The "liquid" fill: drains in from the top as time elapses. Its colour
+ * heats toward red over the last 20% so the end sneaks up visibly.
+ */
+function LiquidFill({ start, end, color }: { start: number; end: number; color: string }) {
+  const now = useClock((s) => s.now)
+  const progress = clamp((minutesOfDay(new Date(now)) - start) / (end - start), 0, 1)
+  const heat = clamp((progress - 0.8) / 0.2, 0, 1)
+  const base = `color-mix(in oklab, ${color} 62%, #111)`
+  const fill = `color-mix(in oklab, ${base} ${Math.round((1 - heat) * 100)}%, #ff3b3b)`
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0"
+      style={{ height: `${progress * 100}%`, background: fill, transition: 'height 1s linear, background 1s linear' }}
+      role="progressbar"
+      aria-label="Time elapsed"
+      aria-valuenow={Math.round(progress * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <svg
+        className="liquid-wave absolute top-full left-0 h-2 w-[200%]"
+        viewBox="0 0 200 8"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path d={WAVE} fill={fill} style={{ transition: 'fill 1s linear' }} />
+      </svg>
+    </div>
+  )
+}
+
+function TimeLeft({ end }: { end: number }) {
+  const now = useClock((s) => s.now)
+  const left = Math.max(0, Math.round((end - minutesOfDay(new Date(now))) * 60))
+  const mm = Math.floor(left / 60)
+  const ss = String(left % 60).padStart(2, '0')
+  return (
+    <div className="mt-1 inline-block bg-[#111] px-1.5 py-0.5 font-mono text-xs font-black text-white" aria-live="off">
+      {mm}:{ss} left
+    </div>
+  )
+}
