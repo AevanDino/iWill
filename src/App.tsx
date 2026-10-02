@@ -110,7 +110,7 @@ function Toast() {
             animate={{ y: 0, opacity: 1, rotate: 0 }}
             exit={{ y: 20, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 500, damping: 28 }}
-            className="border-[3px] border-[#111] bg-[#111] px-4 py-2 text-sm font-black text-white shadow-[4px_4px_0_0_var(--accent)]"
+            className="border-[3px] border-[#111] bg-[#111] px-4 py-2 text-sm font-black text-white shadow-[4px_4px_0_0_var(--accent)] dark:border-line dark:bg-card dark:text-ink"
           >
             {toast.message}
           </motion.div>

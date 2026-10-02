@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { useStore } from './store/appStore'
 import { startClock, useClock } from './store/clock'
 import { startPomodoroLoop, usePomodoro } from './store/pomodoroStore'
+import { useUi } from './store/uiStore'
 import { toDateKey } from './lib/time'
 import './index.css'
 
@@ -35,4 +36,4 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-if (import.meta.env.DEV) Object.assign(window, { __iwill: { useStore, usePomodoro } })
+if (import.meta.env.DEV) Object.assign(window, { __iwill: { useStore, usePomodoro, useUi } })

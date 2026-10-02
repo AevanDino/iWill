@@ -102,7 +102,8 @@ export function SplitDivider() {
       onKeyDown={onKeyDown}
       onDoubleClick={() => usePomodoro.getState().setSplit(DEFAULT_SPLIT)}
       className={[
-        'group relative z-20 flex shrink-0 touch-none items-center justify-center bg-line outline-none select-none',
+        // A quiet raised edge at night, rather than a bright stripe between calendar and timer.
+        'group relative z-20 flex shrink-0 touch-none items-center justify-center bg-line outline-none select-none dark:bg-shadow',
         'focus-visible:bg-accent hover:bg-accent',
         stacked ? 'h-3.5 w-full cursor-row-resize' : 'h-full w-3 cursor-col-resize',
         dragging ? 'bg-accent' : '',
@@ -115,7 +116,7 @@ export function SplitDivider() {
         aria-hidden="true"
       >
         {[0, 1, 2].map((i) => (
-          <span key={i} className="size-1.5 bg-bg group-hover:bg-[#111] group-focus-visible:bg-[#111]" />
+          <span key={i} className="size-1.5 bg-bg group-hover:bg-[#111] group-focus-visible:bg-[#111] dark:bg-muted" />
         ))}
       </span>
     </div>

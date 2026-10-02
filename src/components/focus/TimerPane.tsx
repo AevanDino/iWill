@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { phasePalette } from '../../lib/color'
+import { nightTone, phasePalette } from '../../lib/color'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import {
   estimatePomodoros,
@@ -9,6 +9,7 @@ import {
   POMODORO_LIMITS,
   progress,
   remainingMs,
+  type BreakChoice,
   type PomodoroConfig,
   type PomodoroSession,
 } from '../../lib/pomodoro'
@@ -21,10 +22,17 @@ import { useUi } from '../../store/uiStore'
 import type { TimeBlock } from '../../types'
 import { CollapseIcon, ExpandIcon, GearIcon, PlayIcon } from '../icons'
 import { failureMessage } from '../messages'
+import { tagStyle } from '../tags/tagStyle'
 import { PHASE_COLOR, PHASE_SHOUT } from './phase'
 
 const INK = '#111'
-const ghost = 'btn flex-1 bg-white! text-[#111]! text-sm'
+/** A quick focus has no tag: its night tones come from the default red, teal and grey. */
+const DEFAULT_NIGHT = {
+  focus: nightTone('#ff3b3b', 0),
+  shortBreak: nightTone('#7fb8aa', 1),
+  longBreak: nightTone('#a9b4c8', 2),
+}
+const ghost = 'btn flex-1 bg-card! text-ink! text-sm'
 
 /**
  * The timer pane. Docked beside the calendar (right in landscape, below in
@@ -51,13 +59,27 @@ export function TimerPane() {
   const [optionsOpen, setOptionsOpen] = useState(false)
   useTimerKeys()
   if (!session) return null
-  const ink = palette
+  // Day: the tag's tones (or the CSS defaults). Night: deep backgrounds with glowing ink.
+  // index.css picks one set or the other for the theme.
+  const dayInk = palette
     ? { focus: palette.onFocus, 'short-break': palette.onShortBreak, 'long-break': palette.onLongBreak }[session.phase]
     : INK
-  const themeVars = palette && {
-    '--phase-focus': palette.focus,
-    '--phase-short': palette.shortBreak,
-    '--phase-long': palette.longBreak,
+  const night = palette?.night ?? DEFAULT_NIGHT
+  const tone = { focus: night.focus, 'short-break': night.shortBreak, 'long-break': night.longBreak }[session.phase]
+  const themeVars = {
+    ...(palette && {
+      '--phase-focus-day': palette.focus,
+      '--phase-short-day': palette.shortBreak,
+      '--phase-long-day': palette.longBreak,
+    }),
+    '--phase-focus-night': night.focus.bg,
+    '--phase-short-night': night.shortBreak.bg,
+    '--phase-long-night': night.longBreak.bg,
+    '--pane-ink-day': dayInk,
+    '--pane-glare-day': dayInk === INK ? 'rgb(255 255 255 / 0.55)' : 'rgb(0 0 0 / 0.3)',
+    '--pane-ink-night': tone.glow,
+    '--pane-shade-night': tone.shade,
+    '--pane-bar-day': blockColor ? `color-mix(in oklab, ${blockColor} 55%, white)` : 'rgb(255 255 255 / 0.85)',
   }
 
   // While the linked block is being dragged, show where the timer will end up.
@@ -80,7 +102,7 @@ export function TimerPane() {
       exit={{ opacity: 0, x: 80 }}
       transition={{ type: 'spring', stiffness: 520, damping: 40 }}
       className={[
-        'flex flex-col overflow-hidden text-[#111] [container-type:inline-size]',
+        'flex flex-col overflow-hidden text-ink [container-type:inline-size]',
         // (no `relative` here — it would beat `fixed` and collapse the fullscreen pane)
         fullscreen ? 'fixed inset-0 z-50' : 'timer-dock relative',
       ].join(' ')}
@@ -90,7 +112,7 @@ export function TimerPane() {
       inert={!isPresent}
     >
       {session.status === 'paused' && <div className="stripes pointer-events-none absolute inset-0" />}
-      <EdgeProgress pct={pct} color={blockColor} label={span ? 'Block progress' : 'Pomodoro progress'} />
+      <EdgeProgress pct={pct} label={span ? 'Block progress' : 'Pomodoro progress'} />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-4 pr-7 sm:gap-4">
         <div className="flex items-center gap-2">
@@ -98,7 +120,7 @@ export function TimerPane() {
           <div className="flex-1" />
           <button
             type="button"
-            className="btn btn-icon bg-white! text-[#111]!"
+            className="btn btn-icon bg-card! text-ink!"
             aria-expanded={optionsOpen}
             aria-label="Timer settings"
             data-tip="Timer settings"
@@ -108,7 +130,7 @@ export function TimerPane() {
           </button>
           <button
             type="button"
-            className="btn bg-white! px-2! text-sm text-[#111]!"
+            className="btn bg-card! px-2! text-sm text-ink!"
             aria-pressed={fullscreen}
             onClick={() => usePomodoro.getState().setFullscreen(!fullscreen)}
             data-tip={fullscreen ? 'Back to split view (Esc)' : 'Fullscreen timer (F)'}
@@ -121,7 +143,7 @@ export function TimerPane() {
         {/* Sits straight on the phase colour, so it takes that colour's ink (white on dark tags). */}
         <div
           className="relative flex min-h-[4.5rem] flex-1 flex-col items-center justify-center gap-3 [container-type:size]"
-          style={{ color: ink }}
+          style={{ color: 'var(--pane-ink)' }}
         >
           <div className="relative">
             {running && config.pulse !== 'off' && (
@@ -141,13 +163,13 @@ export function TimerPane() {
               className="font-mono leading-[0.85] font-black tracking-tighter tabular-nums"
               style={{
                 fontSize: 'min(30cqw, 62cqh)',
-                textShadow: `0.045em 0.045em 0 ${ink === INK ? 'rgb(255 255 255 / 0.55)' : 'rgb(0 0 0 / 0.3)'}`,
+                textShadow: '0.045em 0.045em 0 var(--pane-glare)',
               }}
             >
               {formatClock(left)}
             </div>
             {session.status === 'paused' && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-6 border-[4px] border-[#111] bg-white px-3 py-0.5 text-xl font-black tracking-widest text-[#111] uppercase shadow-[5px_5px_0_0_#111]">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-6 border-[4px] border-line bg-card px-3 py-0.5 text-xl font-black tracking-widest text-[#111] uppercase shadow-[5px_5px_0_0_var(--shadow)]">
                 Paused
               </div>
             )}
@@ -157,6 +179,8 @@ export function TimerPane() {
 
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 sm:gap-4">
         <BlockSummary session={session} />
+
+        {role === 'owner' && <BreakPrompt />}
 
         {role === 'viewer' ? (
           <ViewerCard session={session} />
@@ -203,12 +227,13 @@ function useTimerKeys() {
 /**
  * Progress as a bar down the pane's right edge, away from the calendar:
  * through the linked block, or through the Pomodoro for a quick focus. The
- * elapsed part is a light tint of the block's colour (near-white without one).
+ * elapsed part is a light tint of the block's colour by day (near-white without
+ * one), and the glowing tone at night.
  */
-function EdgeProgress({ pct, color, label }: { pct: number; color: string | undefined; label: string }) {
+function EdgeProgress({ pct, label }: { pct: number; label: string }) {
   return (
     <div
-      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-3 bg-black/15"
+      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-3 bg-(--pane-track)"
       role="progressbar"
       aria-label={label}
       aria-valuenow={Math.round(pct * 100)}
@@ -218,7 +243,7 @@ function EdgeProgress({ pct, color, label }: { pct: number; color: string | unde
     >
       <div
         className="h-[calc(var(--p)*100%)] w-full transition-[height] duration-1000 ease-linear"
-        style={{ background: color ? `color-mix(in oklab, ${color} 55%, white)` : 'rgb(255 255 255 / 0.85)' }}
+        style={{ background: 'var(--pane-bar)' }}
       />
     </div>
   )
@@ -228,8 +253,8 @@ function SessionBadge({ session, config }: { session: PomodoroSession; config: P
   const text =
     session.phase === 'focus' ? `Focus · Session ${session.round} / ${config.sessionsBeforeLong}` : PHASE_LABEL[session.phase]
   return (
-    <div className="flex min-w-0 items-center gap-2 border-[3px] border-[#111] bg-[#111] px-2.5 py-1 text-xs font-black tracking-widest text-white uppercase sm:text-sm">
-      {session.status === 'running' && <span className="blink size-2.5 shrink-0 bg-white" aria-hidden="true" />}
+    <div className="flex min-w-0 items-center gap-2 border-[3px] border-chip bg-chip px-2.5 py-1 text-xs font-black tracking-widest text-on-chip uppercase sm:text-sm">
+      {session.status === 'running' && <span className="blink size-2.5 shrink-0 bg-on-chip" aria-hidden="true" />}
       <span className="truncate">{text}</span>
     </div>
   )
@@ -248,7 +273,7 @@ function CycleDots({ session, config }: { session: PomodoroSession; config: Pomo
         return (
           <span
             key={i}
-            className={`size-4 border-[3px] border-current ${done ? 'bg-current' : current ? 'bg-white' : ''} ${current && session.status === 'running' ? 'blink' : ''}`}
+            className={`size-4 border-[3px] border-current ${done ? 'bg-current' : current ? 'bg-card' : ''} ${current && session.status === 'running' ? 'blink' : ''}`}
           />
         )
       })}
@@ -271,7 +296,7 @@ function BlockSummary({ session }: { session: PomodoroSession }) {
   if (!block) {
     const current = blocks.find((b) => !b.completed && b.start <= nowMin && nowMin < b.end)
     return (
-      <div className="flex items-center gap-3 border-[3px] border-[#111] bg-white px-3 py-2">
+      <div className="flex items-center gap-3 border-[3px] border-line bg-card px-3 py-2">
         <span className="text-2xl" aria-hidden="true">
           ⚡
         </span>
@@ -303,11 +328,11 @@ function BlockSummary({ session }: { session: PomodoroSession }) {
       : `${formatDuration(Math.ceil(left))} left`
 
   return (
-    <div className="border-[3px] border-[#111] bg-white">
+    <div className="border-[3px] border-line bg-card">
       <div className="flex items-center gap-3 px-3 py-2">
         <span
-          className="grid size-10 shrink-0 place-items-center border-[3px] border-[#111] text-xl"
-          style={{ background: category?.color }}
+          className="tag-fill grid size-10 shrink-0 place-items-center border-[3px] border-line text-xl"
+          style={tagStyle(category?.color)}
           aria-hidden="true"
         >
           {category?.emoji ?? '📌'}
@@ -322,14 +347,62 @@ function BlockSummary({ session }: { session: PomodoroSession }) {
           </div>
         </div>
       </div>
-      <div className="h-2 border-t-[3px] border-[#111]">
+      <div className="h-2 border-t-[3px] border-line">
         <div
-          className="h-full"
-          style={{ width: `${(elapsed / duration) * 100}%`, background: category?.color ?? INK, transition: 'width 1s linear' }}
+          className="tag-fill h-full"
+          style={{ ...tagStyle(category?.color), width: `${(elapsed / duration) * 100}%`, transition: 'width 1s linear' }}
         />
       </div>
       {(over || left <= 5) && <EndingBanner block={block} over={over} left={left} />}
     </div>
+  )
+}
+
+/**
+ * The break runs past its block into the next one: how should the day pay
+ * for those minutes? Unavailable options stay visible, with the reason in
+ * their tooltip (so they're aria-disabled rather than disabled, which would
+ * swallow the hover).
+ */
+function BreakPrompt() {
+  const prompt = usePomodoro((s) => s.breakPrompt)
+  const [remember, setRemember] = useState(false)
+  if (!prompt) return null
+  const { overflow: o } = prompt
+  const pick = (choice: BreakChoice) => usePomodoro.getState().resolveBreak(choice, remember)
+  const option = (choice: BreakChoice, label: string, reason?: string, primary = false) => (
+    <button
+      type="button"
+      aria-disabled={!!reason}
+      data-tip={reason}
+      onClick={() => !reason && pick(choice)}
+      className={`btn min-w-0 px-2.5! py-1! text-xs ${primary ? 'bg-[#111]! text-white!' : 'bg-white! text-[#111]!'} ${reason ? 'cursor-not-allowed opacity-45' : ''}`}
+    >
+      <span className="truncate">{label}</span>
+    </button>
+  )
+  return (
+    <motion.div
+      initial={{ y: 12, opacity: 0, rotate: -1 }}
+      animate={{ y: 0, opacity: 1, rotate: 0 }}
+      transition={{ type: 'spring', stiffness: 600, damping: 26 }}
+      className="border-[3px] border-[#111] bg-accent px-3 py-2.5 text-[#111] shadow-[4px_4px_0_0_var(--shadow)]"
+      role="alertdialog"
+      aria-label="Your break runs into the next block"
+    >
+      <div className="mb-2 text-sm leading-snug font-black">
+        ☕ Your break runs <span className="underline decoration-2 underline-offset-2">{o.minutes} min</span> into “{o.next.title}”.
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {option('push', 'Push my day', o.push.ok ? undefined : failureMessage(o.push), true)}
+        {option('shorten', `Take it from “${o.next.title}”`, o.shortenReason)}
+        {option('leave', 'Leave my plan')}
+      </div>
+      <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-xs font-bold">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="size-3.5 accent-[#111]" />
+        Remember my choice (change it in timer settings)
+      </label>
+    </motion.div>
   )
 }
 
@@ -348,15 +421,15 @@ function EndingBanner({ block, over, left }: { block: TimeBlock; over: boolean; 
     if (r.ok) useUi.getState().notify(r.freed > 0 ? `🎉 Capped — reclaimed ${Math.round(r.freed)} min` : '✅ Block done')
   }
   return (
-    <div className="border-t-[3px] border-[#111] bg-accent px-3 py-2" role="alert">
+    <div className="border-t-[3px] border-line bg-accent px-3 py-2 text-[#111]" role="alert">
       <div className="mb-1.5 text-xs font-black uppercase">
         {over ? '⏰ Block’s over — keep going?' : `⏳ Block ends in ${Math.ceil(left)} min`}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <button type="button" className="btn bg-white! px-2! py-0.5! text-xs" onClick={() => extend(15)}>
+        <button type="button" className="btn bg-white! px-2! py-0.5! text-xs text-[#111]!" onClick={() => extend(15)}>
           +15m
         </button>
-        <button type="button" className="btn bg-white! px-2! py-0.5! text-xs" onClick={() => extend(30)}>
+        <button type="button" className="btn bg-white! px-2! py-0.5! text-xs text-[#111]!" onClick={() => extend(30)}>
           +30m
         </button>
         {!block.completed && (
@@ -387,7 +460,7 @@ function BigButton({ children, onClick, label }: { children: React.ReactNode; on
         onClick()
       }}
       aria-label={label}
-      className="flex w-full items-center justify-center gap-3 border-[4px] border-[#111] bg-[#111] px-5 py-2.5 text-xl font-black tracking-wider text-white uppercase shadow-[5px_5px_0_0_#fff] transition-transform duration-75 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_#fff] active:translate-x-1 active:translate-y-1 active:shadow-none"
+      className="flex w-full items-center justify-center gap-3 border-[4px] border-(--pane-primary) bg-(--pane-primary) px-5 py-2.5 text-xl font-black tracking-wider text-(--pane-on-primary) uppercase shadow-[5px_5px_0_0_var(--pane-primary-shadow)] transition-transform duration-75 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_var(--pane-primary-shadow)] active:translate-x-1 active:translate-y-1 active:shadow-none"
     >
       {children}
     </button>
@@ -403,8 +476,8 @@ function Controls({ session }: { session: PomodoroSession }) {
         {running ? (
           <>
             <span className="flex gap-1.5" aria-hidden="true">
-              <span className="h-5 w-2 bg-white" />
-              <span className="h-5 w-2 bg-white" />
+              <span className="h-5 w-2 bg-(--pane-on-primary)" />
+              <span className="h-5 w-2 bg-(--pane-on-primary)" />
             </span>
             Pause
           </>
@@ -435,7 +508,7 @@ function CompleteCard({ session, config }: { session: PomodoroSession; config: P
       initial={{ y: 24, rotate: -2, opacity: 0 }}
       animate={{ y: 0, rotate: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 600, damping: 18 }}
-      className="border-[4px] border-[#111] bg-white p-3 shadow-[5px_5px_0_0_#111]"
+      className="border-[4px] border-line bg-card p-3 shadow-[5px_5px_0_0_var(--shadow)]"
       role="status"
     >
       <div className="text-lg leading-tight font-black tracking-tight uppercase">
@@ -479,13 +552,13 @@ function CompleteCard({ session, config }: { session: PomodoroSession; config: P
 function RecoveryCard({ session }: { session: PomodoroSession }) {
   const p = usePomodoro.getState()
   return (
-    <div className="border-[4px] border-[#111] bg-white p-3 shadow-[5px_5px_0_0_#111]" role="alert">
+    <div className="border-[4px] border-line bg-card p-3 shadow-[5px_5px_0_0_var(--shadow)]" role="alert">
       <div className="text-lg font-black uppercase">Welcome back</div>
       <p className="mb-2.5 text-xs font-bold">
         Your {PHASE_LABEL[session.phase].toLowerCase()} was interrupted with {formatClock(session.remainingMs)} left.
       </p>
       <div className="flex gap-2">
-        <button type="button" className="btn flex-1 bg-[#111]! text-white!" onClick={p.resume}>
+        <button type="button" className="btn flex-1 bg-chip! text-on-chip!" onClick={p.resume}>
           <PlayIcon size={14} /> Resume
         </button>
         <button type="button" className={ghost} onClick={p.end}>
@@ -499,7 +572,7 @@ function RecoveryCard({ session }: { session: PomodoroSession }) {
 function ViewerCard({ session }: { session: PomodoroSession }) {
   const p = usePomodoro.getState()
   return (
-    <div className="border-[4px] border-[#111] bg-white p-3 shadow-[5px_5px_0_0_#111]" role="status">
+    <div className="border-[4px] border-line bg-card p-3 shadow-[5px_5px_0_0_var(--shadow)]" role="status">
       <div className="font-black uppercase">⏱️ Timer running in another tab</div>
       <p className="mb-2.5 text-xs font-bold">Only one tab keeps time, so nothing gets counted twice.</p>
       <div className="flex flex-wrap gap-2">
@@ -509,7 +582,7 @@ function ViewerCard({ session }: { session: PomodoroSession }) {
         <button type="button" className={ghost} onClick={p.end}>
           End
         </button>
-        <button type="button" className="btn flex-1 bg-[#111]! text-sm text-white!" onClick={() => void p.takeOver()}>
+        <button type="button" className="btn flex-1 bg-chip! text-sm text-on-chip!" onClick={() => void p.takeOver()}>
           Move timer here
         </button>
       </div>
@@ -534,7 +607,7 @@ function PhaseFlash() {
       {visible && (
         <motion.div
           key={visible.id}
-          className="absolute inset-0 z-30 grid place-items-center border-[6px] border-[#111] p-4"
+          className="absolute inset-0 z-30 grid place-items-center border-[6px] border-line p-4"
           style={{ background: PHASE_COLOR[visible.phase], transformOrigin: 'left' }}
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
@@ -546,7 +619,7 @@ function PhaseFlash() {
             initial={{ scale: 1.6, rotate: -8 }}
             animate={{ scale: 1, rotate: -3 }}
             transition={{ type: 'spring', stiffness: 700, damping: 14 }}
-            className="border-[5px] border-[#111] bg-white px-5 py-2.5 text-center text-[min(13cqw,4.5rem)] leading-none font-black tracking-tight whitespace-nowrap text-[#111] shadow-[8px_8px_0_0_#111]"
+            className="border-[5px] border-line bg-card px-5 py-2.5 text-center text-[min(13cqw,4.5rem)] leading-none font-black tracking-tight whitespace-nowrap text-ink dark:text-(--pane-ink) shadow-[8px_8px_0_0_var(--shadow)]"
           >
             {PHASE_SHOUT[visible.phase]}
           </motion.div>
@@ -583,7 +656,7 @@ function CycleOptions({ config, onClose }: { config: PomodoroConfig; onClose(): 
       animate={{ y: 0 }}
       exit={{ y: '-100%' }}
       transition={{ duration: 0.18, ease: 'linear' }}
-      className="absolute inset-x-0 top-0 z-40 max-h-full overflow-y-auto border-b-[4px] border-line bg-paper p-4 text-ink shadow-[0_6px_0_0_#111]"
+      className="absolute inset-x-0 top-0 z-40 max-h-full overflow-y-auto border-b-[4px] border-line bg-paper p-4 text-ink shadow-[0_6px_0_0_var(--shadow)]"
       role="dialog"
       aria-label="Timer settings"
     >
@@ -630,7 +703,7 @@ function CycleOptions({ config, onClose }: { config: PomodoroConfig; onClose(): 
             step={0.05}
             value={config.volume}
             onChange={(e) => update({ volume: Number(e.target.value) })}
-            className="flex-1 accent-[#111]"
+            className="flex-1 accent-ink"
           />
         </label>
       )}
@@ -641,6 +714,13 @@ function CycleOptions({ config, onClose }: { config: PomodoroConfig; onClose(): 
         options={['off', 'prompt', 'auto']}
         names={{ off: 'Nothing', prompt: 'Ask me', auto: 'Auto-start' }}
         onChange={(autoFocus) => update({ autoFocus })}
+      />
+      <Segmented
+        label="When a break runs into the next block"
+        value={config.breakOverflow}
+        options={['ask', 'push', 'shorten', 'leave']}
+        names={{ ask: 'Ask me', push: 'Push day', shorten: 'Shorten next', leave: 'Leave plan' }}
+        onChange={(breakOverflow) => update({ breakOverflow })}
       />
     </motion.div>
   )

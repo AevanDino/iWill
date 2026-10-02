@@ -22,7 +22,12 @@ export interface PomodoroConfig {
   pulse: 'off' | 'subtle' | 'bold'
   /** What to do when a planned block starts and no timer is running. */
   autoFocus: 'off' | 'prompt' | 'auto'
+  /** When a break runs past its block into the next one: ask, or always push / shorten / leave. */
+  breakOverflow: BreakChoice | 'ask'
 }
+
+/** How to pay for break minutes that run into the next block. */
+export type BreakChoice = 'push' | 'shorten' | 'leave'
 
 export const DEFAULT_POMODORO: PomodoroConfig = {
   focusMin: 25,
@@ -34,6 +39,7 @@ export const DEFAULT_POMODORO: PomodoroConfig = {
   volume: 0.4,
   pulse: 'subtle',
   autoFocus: 'prompt',
+  breakOverflow: 'ask',
 }
 
 export const POMODORO_LIMITS = {
@@ -67,6 +73,8 @@ export interface PomodoroSession {
   focusMs: number
   /** Set on reload when the timer was running while the app was closed. */
   interrupted?: boolean
+  /** The Break block inserted to make room for this break, so leaving it early can give the time back. */
+  breakBlockId?: string
   createdAt: number
   updatedAt: number
 }

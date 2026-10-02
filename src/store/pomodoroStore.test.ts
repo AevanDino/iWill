@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IWillDB } from '../db/db'
 import { createSoloCoordinator } from '../lib/tabSync'
 import { minutesOfDay, toDateKey } from '../lib/time'
@@ -167,5 +167,94 @@ describe('pomodoro store', () => {
     expect(pomo.getState().session).toMatchObject({ status: 'running', endsAt })
     pomo.getState().tick(endsAt!)
     expect(pomo.getState().session).toMatchObject({ status: 'complete', completed: 1 })
+  })
+
+  it("doesn't replay an old session's phase flash when a new session starts", async () => {
+    const pomo = make()
+    await pomo.getState().hydrate()
+    await pomo.getState().startFor(null)
+    pomo.getState().skip()
+    expect(pomo.getState().flash?.phase).toBe('short-break')
+    pomo.getState().end()
+    expect(pomo.getState().flash).toBeNull()
+    await pomo.getState().startFor(null)
+    expect(pomo.getState().flash).toBeNull()
+  })
+
+  describe('breaks that run past their block', () => {
+    const h = (hours: number, minutes = 0) => hours * 60 + minutes
+    const at = (hours: number, minutes = 0) => new Date(2026, 9, 2, hours, minutes)
+    const blk = (id: string) => app.getState().blocks.find((b) => b.id === id)!
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(at(9, 50))
+    })
+    afterEach(() => vi.useRealTimers())
+
+    /** A block 9:30–10:00 with another straight after; a fitted focus ends at 10:00 and the short break starts. */
+    async function breakAtBlockEnd(breakOverflow: 'ask' | 'push' | 'shorten' | 'leave') {
+      await app.getState().setDate(toDateKey(new Date()))
+      const pomo = make()
+      await pomo.getState().hydrate()
+      pomo.getState().updateConfig({ autoStart: true, breakOverflow })
+      const work = app.getState().addBlock({ title: 'Work', start: h(9, 30), end: h(10) }).id
+      const next = app.getState().addBlock({ title: 'Next', start: h(10), end: h(11) }).id
+      await pomo.getState().startFor(work)
+      const focusEnd = pomo.getState().session!.endsAt!
+      vi.setSystemTime(focusEnd)
+      pomo.getState().tick(focusEnd)
+      expect(pomo.getState().session).toMatchObject({ phase: 'short-break', status: 'running' })
+      return { pomo, work, next }
+    }
+
+    it('push: makes room with a Break block, and gives back what a skipped break did not use', async () => {
+      const { pomo, next } = await breakAtBlockEnd('push')
+      const breakId = pomo.getState().session!.breakBlockId!
+      expect(blk(breakId)).toMatchObject({ title: 'Break', categoryId: 'break', start: h(10), end: h(10, 5) })
+      expect(blk(next)).toMatchObject({ start: h(10, 5), end: h(11, 5) })
+
+      vi.setSystemTime(at(10, 2))
+      pomo.getState().skip()
+      expect(pomo.getState().session).toMatchObject({ phase: 'focus' })
+      expect(pomo.getState().session!.breakBlockId).toBeUndefined()
+      expect(blk(breakId)).toMatchObject({ completed: true, end: h(10, 2) })
+      expect(blk(next).start).toBe(h(10, 2))
+    })
+
+    it('shorten: the next block starts when the break ends', async () => {
+      const { next } = await breakAtBlockEnd('shorten')
+      expect(blk(next)).toMatchObject({ start: h(10, 5), end: h(11) })
+      expect(app.getState().blocks.some((b) => b.title === 'Break')).toBe(false)
+    })
+
+    it('ask: prompts, and "leave my plan" keeps the plan, records the cost and can be remembered', async () => {
+      const { pomo, next } = await breakAtBlockEnd('ask')
+      expect(pomo.getState().breakPrompt?.overflow).toMatchObject({ minutes: 5 })
+      expect(blk(next).start).toBe(h(10))
+
+      pomo.getState().resolveBreak('leave', true)
+      expect(pomo.getState().breakPrompt).toBeNull()
+      expect(pomo.getState().breakDebt).toEqual({ blockId: next, minutes: 5 })
+      expect(pomo.getState().config.breakOverflow).toBe('leave')
+      expect(blk(next).start).toBe(h(10))
+    })
+
+    it('leaves the calendar alone when the break fits inside its block', async () => {
+      await app.getState().setDate(toDateKey(new Date()))
+      const pomo = make()
+      await pomo.getState().hydrate()
+      pomo.getState().updateConfig({ autoStart: true, breakOverflow: 'push' })
+      const work = app.getState().addBlock({ title: 'Work', start: h(9, 30), end: h(11) }).id
+      app.getState().addBlock({ title: 'Next', start: h(11), end: h(12) })
+      const before = app.getState().blocks.map(({ id, start, end }) => ({ id, start, end }))
+      await pomo.getState().startFor(work)
+      const focusEnd = pomo.getState().session!.endsAt!
+      vi.setSystemTime(focusEnd)
+      pomo.getState().tick(focusEnd)
+      expect(pomo.getState().session).toMatchObject({ phase: 'short-break' })
+      expect(pomo.getState().breakPrompt).toBeNull()
+      expect(app.getState().blocks.map(({ id, start, end }) => ({ id, start, end }))).toEqual(before)
+    })
   })
 })

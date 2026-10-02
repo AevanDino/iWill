@@ -133,6 +133,12 @@ stateDiagram-v2
 - **Never drifts.** The timer runs from wall-clock timestamps and is saved every second. A quick refresh carries straight on; after a longer absence it freezes at the last saved second and asks whether to resume.
 - **One tab keeps time.** Other tabs can pause or end the session, or take the timer over, and if the timing tab closes another one picks it up.
 - **About to run out?** The timer offers to extend the block (pushing the rest of the day down), cap it, or carry the session on into the next block.
+- **☕ Breaks that run past their block.** A break inside a block is part of its budget and never touches the calendar. When one runs into the *next* block, the timer asks how to pay for those minutes:
+  - **Push my day:** a Break block slots in and the rest of the day moves down. Locked blocks stay put.
+  - **Take it from the next block:** it starts later and gets shorter.
+  - **Leave my plan:** nothing moves, and the Now strip shows the minutes that went to your break.
+  
+  Tick *Remember my choice* to stop being asked (change it again in timer settings). Skip a break the day was pushed for and the unused minutes come back. A break block you already planned next (a *Stretch* with the Break tag, say) is used by the break instead of counted as lost.
 - **The progress bar** on the timer's right edge shows how far through the block you are; for a quick focus, how far through the Pomodoro.
 
 <details>
@@ -146,6 +152,16 @@ stateDiagram-v2
 - On narrow screens the header tucks **Focus**, **Select** and **Routines** into a **⋯** menu.
 - The focused block gets a red outline on the timeline, but you can still move, edit or delete it without affecting the timer.
 </details>
+
+<br>
+
+## 🌙 Night Shift
+
+<p align="center">
+  <img src="docs/readme/day-night.png" width="100%" alt="The same day by day and at night. By day: bright colour slabs, black lines, a pastel blue timer with black digits. At night: dark blocks with glowing coloured edges, a deep navy timer with glowing periwinkle digits and a glowing Pause button.">
+</p>
+
+Dark mode isn't the light theme with the lights off. By day, tags are bright painted slabs. At night they become **light**: blocks turn into dark tinted panels with a glowing edge in their tag colour, and the running block fills up with its glow. The focus timer sinks into a deep tone of the block's hue, with the digits and the one primary button glowing in the tag colour. Hard shadows stay hard but become a quiet raised edge, and the yellow accents stay bright. Pick **Light**, **Dark** or **System** in Settings.
 
 <br>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contrast, hexToOklch, inkOn, oklchToHex, phasePalette, TAG_PALETTE } from './color'
+import { contrast, hexToOklch, inkOn, nightTone, oklchToHex, phasePalette, TAG_PALETTE } from './color'
 
 describe('colour helpers', () => {
   it('picks white ink on dark colours and black on light ones', () => {
@@ -55,6 +55,36 @@ describe('colour helpers', () => {
         const h = hexToOklch(seed).h
         expect(Math.abs(hexToOklch(phasePalette(seed).shortBreak).h - h), seed).toBeLessThan(8)
       }
+    })
+  })
+
+  describe('nightTone', () => {
+    it('gives every tag a dark background with glowing, readable ink', () => {
+      for (const seed of [...TAG_PALETTE, '#ff3b3b', '#7fb8aa', '#a9b4c8']) {
+        for (const calm of [0, 1, 2] as const) {
+          const t = nightTone(seed, calm)
+          expect(hexToOklch(t.bg).l, seed).toBeLessThanOrEqual(0.3)
+          expect(contrast(t.glow, t.bg), `${seed} ${calm}`).toBeGreaterThanOrEqual(4.5)
+          // the shade sits between the background and the glow
+          expect(hexToOklch(t.shade).l).toBeGreaterThan(hexToOklch(t.bg).l)
+          expect(hexToOklch(t.shade).l).toBeLessThan(hexToOklch(t.glow).l)
+        }
+      }
+    })
+
+    it('keeps the hue, and breaks are calmer than focus', () => {
+      for (const seed of ['#4d96ff', '#ff8a3d', '#3ddc97', '#1f3a93']) {
+        const h = hexToOklch(seed).h
+        const focus = nightTone(seed, 0)
+        expect(Math.abs(hexToOklch(focus.glow).h - h), seed).toBeLessThan(8)
+        expect(hexToOklch(nightTone(seed, 2).glow).c).toBeLessThan(hexToOklch(focus.glow).c)
+        expect(hexToOklch(nightTone(seed, 2).bg).c).toBeLessThan(hexToOklch(focus.bg).c + 1e-9)
+      }
+    })
+
+    it('lifts dark tags so they read at night', () => {
+      expect(hexToOklch(nightTone('#1f3a93').glow).l).toBeGreaterThanOrEqual(0.77)
+      expect(nightTone('#ffd23f').glow).toBe('#ffd23f')
     })
   })
 })

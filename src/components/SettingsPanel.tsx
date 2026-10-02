@@ -66,7 +66,7 @@ export function SettingsPanel() {
                   step={10}
                   value={settings.hourHeight}
                   onChange={(e) => update({ hourHeight: Number(e.target.value) })}
-                  className="flex-1 accent-[#111]"
+                  className="flex-1 accent-ink"
                   aria-label="Hour height"
                 />
                 <button type="button" className="btn btn-icon" onClick={() => zoom(20)} aria-label="Zoom in">

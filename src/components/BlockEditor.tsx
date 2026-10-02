@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { inkOn } from '../lib/color'
 import { formatDuration, formatTime, MIN_DURATION, parseTime } from '../lib/time'
 import { useStore } from '../store/appStore'
 import { useUi } from '../store/uiStore'
@@ -8,6 +7,7 @@ import type { TimeBlock } from '../types'
 import { CheckIcon, CloseIcon, LockIcon, PlusIcon, SelectIcon, TrashIcon, UnlockIcon } from './icons'
 import { failureMessage } from './messages'
 import { TagChip } from './tags/TagChip'
+import { tagStyle } from './tags/tagStyle'
 import { TagForm } from './tags/TagForm'
 
 const QUICK_DURATIONS = [5, 10, 15, 30, 45, 60, 90, 120]
@@ -83,7 +83,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 grid place-items-end bg-black/40 p-3 sm:place-items-center"
+      className="fixed inset-0 z-50 grid place-items-end bg-(--backdrop) p-3 sm:place-items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -105,8 +105,8 @@ function EditorDialog({ block }: { block: TimeBlock }) {
       >
         {/* Header styled like the block itself. */}
         <div
-          className="flex items-start gap-3 border-b-[3px] border-line px-5 pt-5 pb-4 transition-colors sm:px-6"
-          style={{ background: color, color: inkOn(color) }}
+          className="tagged flex items-start gap-3 border-b-[3px] border-line px-5 pt-5 pb-4 transition-colors sm:px-6"
+          style={tagStyle(color)}
         >
           <span className="pt-0.5 text-3xl leading-none" aria-hidden="true">
             {category?.emoji ?? '📌'}
@@ -127,7 +127,7 @@ function EditorDialog({ block }: { block: TimeBlock }) {
                 : `At least ${MIN_DURATION} minutes`}
             </div>
           </div>
-          <button type="button" className="btn btn-icon bg-white! text-[#111]!" onClick={close} aria-label="Close">
+          <button type="button" className="btn btn-icon bg-card! text-ink!" onClick={close} aria-label="Close">
             <CloseIcon size={16} />
           </button>
         </div>

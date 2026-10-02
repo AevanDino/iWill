@@ -31,7 +31,7 @@ export function Header() {
     // Below 30rem the header can't fit every button, so the less frequent ones move into the ⋯ menu.
     <header className="relative z-30 flex items-center gap-1 border-b-[3px] border-line bg-paper px-2 py-2.5 @min-[30rem]/planner:gap-1.5 @xl/planner:gap-3 @xl/planner:px-5">
       <div
-        className="shrink-0 -rotate-2 border-[3px] border-[#111] bg-accent px-1.5 py-0.5 text-lg font-black tracking-tighter text-[#111] shadow-[3px_3px_0_0_#111] select-none @xl/planner:px-2 @xl/planner:text-2xl"
+        className="shrink-0 -rotate-2 border-[3px] border-[#111] bg-accent px-1.5 py-0.5 text-lg font-black tracking-tighter text-[#111] shadow-[3px_3px_0_0_var(--shadow)] select-none @xl/planner:px-2 @xl/planner:text-2xl"
         aria-label="iWill"
       >
         iWill<span className="text-hot">.</span>

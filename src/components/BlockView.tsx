@@ -1,10 +1,10 @@
 import { memo, type KeyboardEvent, type PointerEvent } from 'react'
 import { motion } from 'motion/react'
-import { inkOn } from '../lib/color'
 import { CASCADE_SPRING, INSTANT, SNAP_SPRING } from '../lib/physics'
 import { clamp, formatDuration, formatTime, minutesOfDay } from '../lib/time'
 import { useClock } from '../store/clock'
 import type { Category, TimeBlock } from '../types'
+import { tagStyle } from './tags/tagStyle'
 import { CapIcon, CheckIcon, LockIcon, PlayIcon } from './icons'
 
 export type GripKind = 'move' | 'start' | 'end'
@@ -142,7 +142,7 @@ export const BlockView = memo(function BlockView({
         height,
         scale: raised ? 1.025 : 1,
         rotate: mode === 'dragging' ? -0.8 : 0,
-        boxShadow: raised ? '8px 8px 0 0 var(--line)' : '4px 4px 0 0 var(--line)',
+        boxShadow: raised ? '8px 8px 0 0 var(--tag-shadow)' : '4px 4px 0 0 var(--tag-shadow)',
       }}
       transition={{
         top: mode === 'dragging' ? INSTANT : mode === 'displaced' ? CASCADE_SPRING : SNAP_SPRING,
@@ -150,16 +150,17 @@ export const BlockView = memo(function BlockView({
         default: SNAP_SPRING,
       }}
       className={[
-        'lane select-none overflow-hidden outline-none',
+        'lane tagged select-none overflow-hidden outline-none',
         'focus-visible:ring-4 focus-visible:ring-accent focus-visible:ring-offset-2',
         pinned ? 'cursor-pointer' : mode === 'dragging' ? 'cursor-grabbing' : 'cursor-grab',
         isActive && mode === 'idle' ? 'is-active-block' : '',
       ].join(' ')}
       style={{
         zIndex: raised ? 30 : isActive ? 12 : 10,
-        backgroundColor: color,
-        color: inkOn(color),
-        border: `3px ${block.locked && !sliver ? 'double' : slotting ? 'dashed' : 'solid'} ${invalid ? 'var(--hot)' : 'var(--line)'}`,
+        // Colours come from .tagged (a slab by day, a glowing edge at night); only "invalid" overrides them.
+        ...tagStyle(color),
+        borderStyle: block.locked && !sliver ? 'double' : slotting ? 'dashed' : 'solid',
+        ...(invalid && { borderColor: 'var(--hot)' }),
         // A 3px border top and bottom would swallow a 7px sliver.
         borderWidth: sliver ? 2 : block.locked ? 5 : 3,
         filter: missed ? 'saturate(0.35)' : undefined,
@@ -168,7 +169,7 @@ export const BlockView = memo(function BlockView({
         opacity: block.completed && !isActive ? 0.72 : 1,
       }}
     >
-      {isActive && <LiquidFill start={liveStart} end={liveEnd} color={color} />}
+      {isActive && <LiquidFill start={liveStart} end={liveEnd} />}
       {(block.completed || missed) && <div className="hatched pointer-events-none absolute inset-0" />}
 
       {resizable && (
@@ -205,7 +206,7 @@ export const BlockView = memo(function BlockView({
             >
               {selecting && (
                 <span
-                  className={`grid size-4 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-[#111] text-white' : ''}`}
+                  className={`grid size-4 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-chip text-on-chip' : ''}`}
                   aria-hidden="true"
                 >
                   {selected && <CheckIcon size={10} />}
@@ -214,7 +215,7 @@ export const BlockView = memo(function BlockView({
               {category?.emoji && <span aria-hidden="true">{category.emoji}</span>}
               <span className="truncate">{block.title}</span>
               {focused && (
-                <span className="shrink-0 border-2 border-[#111] bg-(--phase-focus) px-1 text-[10px] font-black tracking-wider uppercase">
+                <span className="shrink-0 border-2 border-line bg-(--phase-focus) px-1 text-[10px] font-black tracking-wider text-[#111] uppercase">
                   Focus
                 </span>
               )}
@@ -253,7 +254,7 @@ export const BlockView = memo(function BlockView({
                 <button
                   type="button"
                   onClick={() => actions.cap(block.id)}
-                  className="flex items-center gap-1 border-[3px] border-[#111] bg-[#111] px-2 py-0.5 text-[11px] font-black tracking-wider text-white uppercase shadow-[2px_2px_0_0_#fff] hover:bg-[#ff3b3b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                  className="flex items-center gap-1 border-[3px] border-chip bg-chip px-2 py-0.5 text-[11px] font-black tracking-wider text-on-chip uppercase shadow-[2px_2px_0_0_var(--card)] hover:bg-[#ff3b3b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
                   data-tip="Finish now and pull the rest of your day up"
                 >
                   <CapIcon size={12} /> Cap
@@ -300,7 +301,7 @@ function SmallButton({
       aria-pressed={pressed}
       data-tip={label}
       onClick={onClick}
-      className={`grid size-6 place-items-center border-2 border-[#111] ${pressed ? 'bg-[#111] text-white' : 'bg-white/80 text-[#111]'} hover:-translate-x-px hover:-translate-y-px hover:shadow-[2px_2px_0_0_#111] active:translate-0 active:shadow-none`}
+      className={`grid size-6 place-items-center border-2 border-line ${pressed ? 'bg-chip text-on-chip' : 'bg-card/80 text-ink'} hover:-translate-x-px hover:-translate-y-px hover:shadow-[2px_2px_0_0_var(--shadow)] active:translate-0 active:shadow-none`}
     >
       {children}
     </button>
@@ -314,12 +315,12 @@ const WAVE = `M0 0 V4 Q5 8 10 4 ${Array.from({ length: 19 }, (_, i) => `T${(i + 
  * The "liquid" fill: drains in from the top as time elapses. Its colour
  * heats toward red over the last 20% so the end sneaks up visibly.
  */
-function LiquidFill({ start, end, color }: { start: number; end: number; color: string }) {
+function LiquidFill({ start, end }: { start: number; end: number }) {
   const now = useClock((s) => s.now)
   const progress = clamp((minutesOfDay(new Date(now)) - start) / (end - start), 0, 1)
   const heat = clamp((progress - 0.8) / 0.2, 0, 1)
-  const base = `color-mix(in oklab, ${color} 62%, #111)`
-  const fill = `color-mix(in oklab, ${base} ${Math.round((1 - heat) * 100)}%, #ff3b3b)`
+  // --liquid comes from .tagged: the tag darkened by day, its glow at night.
+  const fill = `color-mix(in oklab, var(--liquid) ${Math.round((1 - heat) * 100)}%, #ff3b3b)`
 
   return (
     <div
@@ -337,7 +338,7 @@ function LiquidFill({ start, end, color }: { start: number; end: number; color: 
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        <path d={WAVE} fill={fill} style={{ transition: 'fill 1s linear' }} />
+        <path d={WAVE} style={{ fill, transition: 'fill 1s linear' }} />
       </svg>
     </div>
   )
@@ -349,7 +350,7 @@ function TimeLeft({ end }: { end: number }) {
   const mm = Math.floor(left / 60)
   const ss = String(left % 60).padStart(2, '0')
   return (
-    <div className="mt-1 inline-block bg-[#111] px-1.5 py-0.5 font-mono text-xs font-black text-white" aria-live="off">
+    <div className="mt-1 inline-block bg-chip px-1.5 py-0.5 font-mono text-xs font-black text-on-chip" aria-live="off">
       {mm}:{ss} left
     </div>
   )

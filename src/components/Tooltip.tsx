@@ -45,6 +45,8 @@ export function TooltipLayer() {
     let shown: HTMLElement | null = null
     // After a click, stay quiet until the pointer moves on to something else.
     let muted: HTMLElement | null = null
+    // Focus tips are for keyboard users: a dialog autofocusing its close button shouldn't pop one.
+    let keyboard = false
 
     const hide = () => {
       clearTimeout(timer)
@@ -73,21 +75,26 @@ export function TooltipLayer() {
       show(el, shown ? 0 : HOVER_DELAY)
     }
     const onDown = (e: PointerEvent) => {
+      keyboard = false
       muted = tipTarget(e.target)
       hide()
     }
     const onFocus = (e: FocusEvent) => {
       const el = tipTarget(e.target)
-      if (el?.matches(':focus-visible')) show(el, 0)
+      if (keyboard && el?.matches(':focus-visible')) show(el, 0)
     }
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && hide()
+    const onKey = (e: KeyboardEvent) => {
+      keyboard = true
+      if (e.key === 'Escape') hide()
+    }
 
     document.addEventListener('pointerover', onOver)
     document.addEventListener('pointerdown', onDown, true)
     document.addEventListener('focusin', onFocus)
     document.addEventListener('focusout', hide)
     document.addEventListener('scroll', hide, true)
-    document.addEventListener('keydown', onKey)
+    // Capture, so dialogs that stop key events don't hide keyboard use from us.
+    document.addEventListener('keydown', onKey, true)
     window.addEventListener('blur', hide)
     document.documentElement.addEventListener('pointerleave', hide)
     return () => {
@@ -97,7 +104,7 @@ export function TooltipLayer() {
       document.removeEventListener('focusin', onFocus)
       document.removeEventListener('focusout', hide)
       document.removeEventListener('scroll', hide, true)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
       window.removeEventListener('blur', hide)
       document.documentElement.removeEventListener('pointerleave', hide)
     }
@@ -126,7 +133,7 @@ export function TooltipLayer() {
       initial={{ opacity: 0, y: pos?.above ? 4 : -4, rotate: -2 }}
       animate={pos ? { opacity: 1, y: 0, rotate: 0 } : { opacity: 0 }}
       transition={{ type: 'spring', stiffness: 700, damping: 30 }}
-      className="pointer-events-none fixed z-[70] max-w-60 border-[3px] border-line bg-[#111] px-2 py-1 text-xs leading-snug font-black text-white shadow-[3px_3px_0_0_var(--accent)]"
+      className="pointer-events-none fixed z-[70] max-w-60 border-[3px] border-line bg-[#111] px-2 py-1 text-xs leading-snug font-black text-white dark:bg-card dark:text-ink shadow-[3px_3px_0_0_var(--accent)]"
       style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
     >
       {tip.text}

@@ -23,18 +23,41 @@
   --accent: #ffd23f;
   --hot: #ff3b3b;
   --dot: rgb(17 17 17 / 0.12);
+  /* Cards and buttons; hard shadows; the inverted "chip" (black label, white text). */
+  --card: #ffffff;
+  --btn: var(--paper);
+  --shadow: #111111;
+  --chip: #111111;
+  --on-chip: #ffffff;
+  /* Done/missed stripes; the dim behind dialogs. */
+  --hatch: rgb(17 17 17 / 0.14);
+  --backdrop: rgb(0 0 0 / 0.4);
   color-scheme: light;
 }
 
+/*
+ * Night Shift: neo-brutalism after dark. Surfaces go deep and quiet, lines
+ * soften so they don't glare, and hard shadows become a raised edge instead
+ * of a cream outline. The bright colours turn into light: tag colours show as
+ * edges, fills and glowing digits rather than big painted slabs (see .tagged
+ * and the timer pane's night palette).
+ */
 :root[data-theme='dark'] {
-  --bg: #16151a;
-  --paper: #222128;
-  --ink: #f6efdc;
-  --muted: #a8a293;
-  --line: #f6efdc;
-  --grid: rgb(246 239 220 / 0.08);
-  --grid-strong: rgb(246 239 220 / 0.24);
-  --dot: rgb(246 239 220 / 0.08);
+  --bg: #121117;
+  --paper: #1b1a21;
+  --card: #25242c;
+  --btn: var(--card);
+  --ink: #efe8d6;
+  --muted: #a29b8b;
+  --line: #d6cfbc;
+  --shadow: #34303f;
+  --chip: #efe8d6;
+  --on-chip: #16151b;
+  --grid: rgb(239 232 214 / 0.06);
+  --grid-strong: rgb(239 232 214 / 0.18);
+  --dot: rgb(239 232 214 / 0.05);
+  --hatch: rgb(239 232 214 / 0.1);
+  --backdrop: rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 
@@ -46,11 +69,15 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-hot: var(--hot);
+  --color-card: var(--card);
+  --color-shadow: var(--shadow);
+  --color-chip: var(--chip);
+  --color-on-chip: var(--on-chip);
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  --shadow-brutal: 4px 4px 0 0 var(--line);
-  --shadow-brutal-sm: 2px 2px 0 0 var(--line);
-  --shadow-brutal-lg: 7px 7px 0 0 var(--line);
+  --shadow-brutal: 4px 4px 0 0 var(--shadow);
+  --shadow-brutal-sm: 2px 2px 0 0 var(--shadow);
+  --shadow-brutal-lg: 7px 7px 0 0 var(--shadow);
 }
 
 html,
@@ -82,7 +109,7 @@ body {
     justify-content: center;
     gap: 0.4rem;
     border: 3px solid var(--line);
-    background: var(--paper);
+    background: var(--btn);
     color: var(--ink);
     font-weight: 800;
     padding: 0.35rem 0.75rem;
@@ -171,7 +198,35 @@ body {
 }
 
 .hatched {
-  background-image: repeating-linear-gradient(-45deg, rgb(17 17 17 / 0.14) 0 6px, transparent 6px 12px);
+  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 6px, transparent 6px 12px);
+}
+
+/*
+ * A surface in a tag's colour. Set --tag, --tag-on (its readable ink) and
+ * --tag-glow (it lifted for dark) inline; see tagStyle(). By day it's a slab
+ * of the colour; at night a dark tint with the colour as its glowing edge.
+ */
+.tagged {
+  background-color: var(--tag);
+  color: var(--tag-on);
+  border-color: var(--line);
+  --tag-shadow: var(--shadow);
+  --liquid: color-mix(in oklab, var(--tag) 62%, #111);
+}
+:root[data-theme='dark'] .tagged {
+  background-color: color-mix(in oklab, var(--tag) 22%, var(--card));
+  color: var(--ink);
+  border-color: var(--tag-glow, var(--tag));
+  --tag-shadow: color-mix(in oklab, var(--tag-glow, var(--tag)) 40%, var(--bg));
+  /* The running block lights up from below; text stays readable on it. */
+  --liquid: color-mix(in oklab, var(--tag-glow, var(--tag)) 34%, var(--card));
+}
+/* Just the colour, as a fill (progress bars, emoji tiles): the glow at night. */
+.tag-fill {
+  background-color: var(--tag);
+}
+:root[data-theme='dark'] .tag-fill {
+  background-color: var(--tag-glow, var(--tag));
 }
 
 /*
@@ -273,6 +328,39 @@ body {
 
 .stripes {
   background-image: repeating-linear-gradient(-45deg, rgb(17 17 17 / 0.12) 0 14px, transparent 14px 28px);
+}
+:root[data-theme='dark'] .stripes {
+  background-image: repeating-linear-gradient(-45deg, rgb(239 232 214 / 0.06) 0 14px, transparent 14px 28px);
+}
+
+/*
+ * The timer pane picks its day or night palette. TimerPane sets the
+ * *-day / *-night values inline from the block's tag (or the defaults for a
+ * quick focus); everything inside reads the plain names.
+ */
+[data-timer-pane] {
+  --phase-focus: var(--phase-focus-day, #ff3b3b);
+  --phase-short: var(--phase-short-day, #7fb8aa);
+  --phase-long: var(--phase-long-day, #a9b4c8);
+  --pane-ink: var(--pane-ink-day, #111);
+  --pane-glare: var(--pane-glare-day, rgb(255 255 255 / 0.55));
+  --pane-primary: #111;
+  --pane-on-primary: #fff;
+  --pane-primary-shadow: #fff;
+  --pane-track: rgb(0 0 0 / 0.15);
+  --pane-bar: var(--pane-bar-day, rgb(255 255 255 / 0.85));
+}
+:root[data-theme='dark'] [data-timer-pane] {
+  --phase-focus: var(--phase-focus-night);
+  --phase-short: var(--phase-short-night);
+  --phase-long: var(--phase-long-night);
+  --pane-ink: var(--pane-ink-night);
+  --pane-glare: var(--pane-shade-night);
+  --pane-primary: var(--pane-ink-night);
+  --pane-on-primary: #16151b;
+  --pane-primary-shadow: var(--pane-shade-night);
+  --pane-track: rgb(255 255 255 / 0.08);
+  --pane-bar: var(--pane-ink-night);
 }
 
 @media (prefers-reduced-motion: reduce) {

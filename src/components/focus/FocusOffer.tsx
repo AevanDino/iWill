@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { inkOn } from '../../lib/color'
 import { unlockAudio } from '../../lib/sound'
 import { useStore } from '../../store/appStore'
+import { tagStyle } from '../tags/tagStyle'
 import { usePomodoro } from '../../store/pomodoroStore'
 
 /** "Your block just started — focus on it?" */
@@ -24,13 +24,13 @@ export function FocusOffer() {
           className="pointer-events-none fixed inset-x-0 top-16 z-40 flex justify-center px-3"
         >
           <div
-            className="pointer-events-auto w-full max-w-[26rem] border-[3px] border-[#111] bg-paper shadow-brutal-lg"
+            className="pointer-events-auto w-full max-w-[26rem] border-[3px] border-line bg-paper shadow-brutal-lg"
             role="alertdialog"
             aria-label="Start a Pomodoro?"
           >
             <div
-              className="flex items-center gap-2 border-b-[3px] border-[#111] px-3 py-2"
-              style={{ background: category?.color, color: category ? inkOn(category.color) : '#111' }}
+              className="tagged flex items-center gap-2 border-b-[3px] px-3 py-2"
+              style={tagStyle(category?.color)}
             >
               <span className="text-lg">{category?.emoji}</span>
               <span className="label">Starting now</span>

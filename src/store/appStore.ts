@@ -81,6 +81,8 @@ export interface AppState {
   updateSettings(patch: Partial<AppSettings>): void
 
   addBlock(input: NewBlock): { result: ResolveResult; id: string }
+  /** Add a ready-made block, pushing the rest of the day out of its way (like a drag). */
+  insertBlock(block: TimeBlock): ResolveResult
   updateBlock(id: string, patch: Partial<Pick<TimeBlock, 'title' | 'categoryId'>>): void
   moveBlock(id: string, start: Minutes, end: Minutes): ResolveResult
   applyMoves(moves: BlockMove[]): void
@@ -207,6 +209,14 @@ export function createAppStore(database: IWillDB = defaultDb, { sync = false } =
         const result = resolveCollisions(withNew, [{ id, start, end }], resolveOptionsFor(state))
         if (result.ok) commit(applyMoves(withNew, result.moves))
         return { result, id }
+      },
+
+      insertBlock(block) {
+        const state = get()
+        const withNew = [...state.blocks, block]
+        const result = resolvePush(withNew, [{ id: block.id, start: block.start, end: block.end }], resolveOptionsFor(state))
+        if (result.ok) commit(applyMoves(withNew, result.moves))
+        return result
       },
 
       updateBlock(id, patch) {

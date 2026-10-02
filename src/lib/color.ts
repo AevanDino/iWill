@@ -115,6 +115,8 @@ function oklabDistance(x: Oklch, y: Oklch): number {
 }
 
 export interface PhasePalette {
+  /** Dark mode: each phase as a deep background with glowing ink. */
+  night: Record<'focus' | 'shortBreak' | 'longBreak', NightTone>
   focus: string
   shortBreak: string
   longBreak: string
@@ -137,11 +139,37 @@ export function phasePalette(seed: string): PhasePalette {
   const longBreak = oklchToHex({ l: clamp01(s.l + 0.15, 0.9, 0.95), c: s.c * 0.25, h: s.h })
   const shortBreak = oklchToHex(short)
   return {
+    night: { focus: nightTone(seed, 0), shortBreak: nightTone(seed, 1), longBreak: nightTone(seed, 2) },
     focus,
     shortBreak,
     longBreak,
     onFocus: inkOn(focus),
     onShortBreak: inkOn(shortBreak),
     onLongBreak: inkOn(longBreak),
+  }
+}
+
+// ---- Night Shift: tag colours as light on dark ------------------------------
+
+export interface NightTone {
+  /** A deep version of the hue, to fill a surface with. */
+  bg: string
+  /** The colour lifted so it reads on dark (digits, edges, accents). */
+  glow: string
+  /** Between the two: hard shadows behind glowing things. */
+  shade: string
+}
+
+/**
+ * A colour as it should appear in dark mode. `calm` (0 = focus, 1 = short
+ * break, 2 = long break) lowers the chroma for restful phases.
+ */
+export function nightTone(seed: string, calm: 0 | 1 | 2 = 0): NightTone {
+  const s = hexToOklch(seed)
+  const soften = [1, 0.65, 0.45][calm]!
+  return {
+    bg: oklchToHex({ l: [0.24, 0.22, 0.21][calm]!, c: Math.min(s.c * 0.45, 0.07) * soften, h: s.h }),
+    glow: oklchToHex({ l: Math.max(s.l, 0.78 + calm * 0.03), c: s.c * soften, h: s.h }),
+    shade: oklchToHex({ l: 0.36, c: Math.min(s.c * 0.7, 0.12) * soften, h: s.h }),
   }
 }

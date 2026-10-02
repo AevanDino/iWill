@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useShallow } from 'zustand/react/shallow'
-import { inkOn } from '../lib/color'
 import { layoutFlags } from '../lib/flags'
 import { isMovable, overlaps, resolveCollisions, resolvePush, type ResolveResult } from '../lib/collision'
 import { clamp, formatDuration, formatTime, minutesOfDay, MIN_DURATION, slotSpan, snap, toDateKey } from '../lib/time'
@@ -17,6 +16,7 @@ import { useClock } from '../store/clock'
 import { useUi } from '../store/uiStore'
 import type { BlockMove, Category, Minutes, TimeBlock } from '../types'
 import { CheckIcon } from './icons'
+import { tagStyle } from './tags/tagStyle'
 import { BlockView, SLIVER_PX, TINY_PX, type BlockActions, type GripKind } from './BlockView'
 import { NowStrip } from './NowStrip'
 import { failureMessage } from './messages'
@@ -675,8 +675,8 @@ export function Timeline() {
             ))}
           {dragTarget && (
             <span
-              className="pointer-events-none absolute right-5 -translate-y-full overflow-hidden px-1.5 py-0.5 font-mono text-xs font-black text-white sm:right-7"
-              style={{ top: yOf(dragTarget.start) - 4, zIndex: 40, background: dragTarget.ok ? '#111' : 'var(--hot)' }}
+              className={`pointer-events-none absolute right-5 -translate-y-full overflow-hidden px-1.5 py-0.5 font-mono text-xs font-black sm:right-7 ${dragTarget.ok ? 'bg-chip text-on-chip' : 'bg-hot text-white'}`}
+              style={{ top: yOf(dragTarget.start) - 4, zIndex: 40 }}
             >
               {preview.mode === 'slot' && '↕ slot in · '}
               {formatTime(dragTarget.start)}–{formatTime(dragTarget.end)}
@@ -701,12 +701,11 @@ export function Timeline() {
                 animate={{ opacity: 1, x: 0, top: yOf(g.start), height: (g.end - g.start) * pxPerMin }}
                 exit={{ opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                className="lane pointer-events-none flex items-center gap-1.5 border-[3px] border-dashed px-2 text-xs font-black"
+                className="lane tagged pointer-events-none flex items-center gap-1.5 border-[3px] border-dashed px-2 text-xs font-black"
                 style={{
+                  ...tagStyle(catById.get(g.categoryId)?.color),
                   zIndex: 25,
-                  background: catById.get(g.categoryId)?.color ?? '#ddd',
-                  color: inkOn(catById.get(g.categoryId)?.color ?? '#ddd'),
-                  borderColor: routinePreview.result.ok ? '#111' : 'var(--hot)',
+                  ...(!routinePreview.result.ok && { borderColor: 'var(--hot)' }),
                   opacity: 0.85,
                 }}
               >
@@ -786,10 +785,10 @@ export function Timeline() {
                     aria-hidden="true"
                   >
                     <span
-                      className="flex h-2.5 w-9 items-center justify-center border-2 border-t-0 border-line group-hover/tab:h-3"
-                      style={{ background: color }}
+                      className="tagged flex h-2.5 w-9 items-center justify-center border-2 border-t-0 group-hover/tab:h-3"
+                      style={tagStyle(color)}
                     >
-                      <span className="h-0.5 w-4 opacity-60" style={{ background: inkOn(color) }} />
+                      <span className="h-0.5 w-4 bg-current opacity-60" />
                     </span>
                   </div>
                 </div>
@@ -900,12 +899,11 @@ function SliverFlag({
       initial={false}
       animate={{ top }}
       transition={{ type: 'spring', stiffness: 520, damping: 40 }}
-      className="pointer-events-auto absolute right-1.5 flex cursor-grab items-center gap-1 border-2 border-line px-1.5 text-[11px] leading-none font-black shadow-brutal-sm select-none"
+      className="tagged pointer-events-auto absolute right-1.5 flex cursor-grab items-center gap-1 border-2 px-1.5 text-[11px] leading-none font-black shadow-brutal-sm select-none"
       style={{
+        ...tagStyle(color),
         left: FLAG_INSET,
         height: FLAG_HEIGHT,
-        background: color,
-        color: inkOn(color),
         opacity: block.completed ? 0.72 : 1,
         outline: selecting && selected ? '3px solid var(--accent)' : undefined,
         outlineOffset: 1,
@@ -914,7 +912,7 @@ function SliverFlag({
       aria-hidden="true"
     >
       {selecting && (
-        <span className={`grid size-3 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-[#111] text-white' : ''}`}>
+        <span className={`grid size-3 shrink-0 place-items-center border-2 border-current ${selected ? 'bg-chip text-on-chip' : ''}`}>
           {selected && <CheckIcon size={8} />}
         </span>
       )}

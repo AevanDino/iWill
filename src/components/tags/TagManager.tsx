@@ -25,7 +25,7 @@ function ManagerDialog() {
 
   return (
     <motion.div
-      className="fixed inset-0 z-[55] grid place-items-end bg-black/40 p-3 sm:place-items-center"
+      className="fixed inset-0 z-[55] grid place-items-end bg-(--backdrop) p-3 sm:place-items-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

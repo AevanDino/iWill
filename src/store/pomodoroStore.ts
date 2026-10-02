@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { db as defaultDb, type IWillDB } from '../db/db'
+import { findBreakOverflow, isBreakTag, type BreakOverflow } from '../lib/breaks'
 import { newId } from '../lib/id'
 import { sendNotification } from '../lib/notify'
 import * as P from '../lib/pomodoro'
@@ -7,7 +8,7 @@ import { playChime, playTick } from '../lib/sound'
 import { createTabCoordinator, type SyncMessage, type TimerCoordinator } from '../lib/tabSync'
 import { clamp, formatTime, minutesOfDay, toDateKey } from '../lib/time'
 import type { TimeBlock } from '../types'
-import { useStore } from './appStore'
+import { resolveOptionsFor, useStore } from './appStore'
 import { useUi } from './uiStore'
 
 /** Time left in `block` if it's running right now, else null. */
@@ -54,6 +55,10 @@ export interface PomodoroState {
   flash: { id: number; phase: P.Phase } | null
   /** A planned block just started — offer to focus on it. */
   offer: { blockId: string } | null
+  /** A break runs into the next block and we're asking how to pay for it. */
+  breakPrompt: { overflow: BreakOverflow } | null
+  /** "Leave my plan": the next block lost these minutes to a break (shown in the Now strip). */
+  breakDebt: { blockId: string; minutes: number } | null
 
   hydrate(): Promise<void>
   /** Start (or resume) a session for a block, or a quick focus when `blockId` is null. */
@@ -81,6 +86,8 @@ export interface PomodoroState {
   blocksChanged(): void
   acceptOffer(): void
   dismissOffer(): void
+  /** Answer the break prompt; `remember` makes it the default from now on. */
+  resolveBreak(choice: P.BreakChoice, remember?: boolean): void
 }
 
 const CONFIG_KEY = 'iwill:pomodoro'
@@ -168,7 +175,17 @@ export function createPomodoroStore({
 
     /** Owner only: apply, persist, and tell other tabs. */
     function commit(next: P.PomodoroSession) {
-      set({ session: isLive(next) ? next : null })
+      const prev = get().session
+      const now = Date.now()
+      // Leaving a break we pushed the day for: give back what wasn't used — if it was left early.
+      const leftBreak = !!prev?.breakBlockId && leftPhase(prev, next)
+      const leftEarly = leftBreak && P.remainingMs(prev!, now) > 30_000
+      if (leftBreak) next = { ...next, breakBlockId: undefined }
+      if (prev && prev.phase !== 'focus' && leftPhase(prev, next) && get().breakPrompt) set({ breakPrompt: null })
+
+      // A new or ended session must not replay the last session's phase flash when the pane opens.
+      const fresh = !prev || !isLive(next) || prev.id !== next.id
+      set({ session: isLive(next) ? next : null, ...(fresh && { flash: null }) })
       syncFocusBlock(next)
       schedulePrecise(next)
       void persist(next)
@@ -177,6 +194,99 @@ export function createPomodoroStore({
         coordinator.broadcast({ type: 'ended' })
         coordinator.release()
       }
+
+      if (leftEarly) giveBack(prev!.breakBlockId!, now)
+      if (startedBreak(prev, next)) onBreakStart(next)
+    }
+
+    /** `next` is no longer the same run of `prev`'s phase. */
+    function leftPhase(prev: P.PomodoroSession, next: P.PomodoroSession) {
+      return (
+        !isLive(next) ||
+        next.phase !== prev.phase ||
+        next.phaseStartedAt !== prev.phaseStartedAt ||
+        next.status === 'complete'
+      )
+    }
+
+    /**
+     * A break has just started running: a real transition, not resuming
+     * after a pause, nor picking a session back up after a reload.
+     */
+    function startedBreak(prev: P.PomodoroSession | null, next: P.PomodoroSession) {
+      if (!prev || next.phase === 'focus' || next.status !== 'running' || next.breakBlockId) return false
+      return prev.phase !== next.phase || prev.phaseStartedAt !== next.phaseStartedAt || prev.status === 'idle'
+    }
+
+    // ---- breaks that run past their block ----------------------------------
+
+    function onBreakStart(s: P.PomodoroSession) {
+      const { blocks, categories, date } = app.getState()
+      const block = blocks.find((b) => b.id === s.blockId)
+      if (!block || date !== s.date || s.phaseStartedAt == null || s.endsAt == null) return
+      const overflow = findBreakOverflow({
+        blocks,
+        categories,
+        block,
+        breakStart: minutesOfDay(new Date(s.phaseStartedAt)),
+        breakEnd: minutesOfDay(new Date(s.endsAt)),
+        ...resolveOptionsFor(app.getState()),
+        breakBlockId: newId(),
+      })
+      if (!overflow) return
+      const choice = get().config.breakOverflow
+      if (choice === 'ask') set({ breakPrompt: { overflow } })
+      else payForBreak(choice, overflow)
+    }
+
+    function payForBreak(choice: P.BreakChoice, o: BreakOverflow) {
+      const notify = (msg: string) => effects && useUi.getState().notify(msg)
+      const leave = () => {
+        set({ breakDebt: { blockId: o.next.id, minutes: o.minutes } })
+        notify(`☕ Your break runs ${o.minutes} min into “${o.next.title}”`)
+      }
+      const s = get().session
+      if (!s) return
+
+      if (choice === 'push') {
+        const { categories } = app.getState()
+        const id = o.breakBlockId
+        const r = o.push.ok
+          ? app.getState().insertBlock({
+              id,
+              date: s.date,
+              title: 'Break',
+              categoryId: categories.find(isBreakTag)?.id ?? o.next.categoryId,
+              start: o.from,
+              end: o.to,
+              completed: false,
+              locked: false,
+            })
+          : o.push
+        if (!r.ok) {
+          leave()
+          return
+        }
+        commit({ ...s, breakBlockId: id })
+        notify(`☕ Pushed your day ${o.minutes} min for your break`)
+      } else if (choice === 'shorten') {
+        const next = app.getState().blocks.find((b) => b.id === o.next.id)
+        if (!o.canShorten || !next || !app.getState().moveBlock(next.id, o.to, next.end).ok) {
+          leave()
+          return
+        }
+        notify(`✂️ Took ${o.minutes} min from “${next.title}” for your break`)
+      } else leave()
+    }
+
+    /** Cap the Break block we inserted, pulling the day back up by what's left of it. */
+    function giveBack(blockId: string, now: number) {
+      const block = app.getState().blocks.find((b) => b.id === blockId)
+      if (!block || block.completed) return
+      const left = block.end - minutesOfDay(new Date(now))
+      if (left < 0.5) return
+      const r = app.getState().capBlock(blockId, new Date(now))
+      if (r.ok && effects && r.freed >= 1) useUi.getState().notify(`↩️ Gave ${Math.round(r.freed)} min back to your day`)
     }
 
     function flash(phase: P.Phase) {
@@ -308,6 +418,8 @@ export function createPomodoroStore({
       split: loadSplit(),
       flash: null,
       offer: null,
+      breakPrompt: null,
+      breakDebt: null,
 
       async hydrate() {
         coordinator.listen({
@@ -497,6 +609,14 @@ export function createPomodoroStore({
         const offer = get().offer
         if (offer) dismissedOffers.add(offer.blockId)
         set({ offer: null })
+      },
+
+      resolveBreak(choice, remember = false) {
+        const prompt = get().breakPrompt
+        if (!prompt) return
+        set({ breakPrompt: null })
+        if (remember) get().updateConfig({ breakOverflow: choice })
+        if (get().session?.phase !== 'focus') payForBreak(choice, prompt.overflow)
       },
     }
   })

@@ -1,14 +1,14 @@
-import { inkOn } from '../../lib/color'
 import type { Category } from '../../types'
 import { CheckIcon } from '../icons'
+import { tagStyle } from './tagStyle'
 
 type ChipTag = Pick<Category, 'name' | 'color' | 'emoji'>
 
-const base = 'inline-flex max-w-full items-center gap-1.5 border-[3px] border-line px-3 py-1.5 text-sm font-black'
+const base = 'tagged inline-flex max-w-full items-center gap-1.5 border-[3px] border-line px-3 py-1.5 text-sm font-black'
 
 /** A tag as a little block-coloured chip. Clickable (a toggle) when `onClick` is given. */
 export function TagChip({ tag, selected, onClick }: { tag: ChipTag; selected?: boolean; onClick?(): void }) {
-  const style = { background: tag.color, color: inkOn(tag.color) }
+  const style = tagStyle(tag.color)
   const body = (
     <>
       {tag.emoji && <span aria-hidden="true">{tag.emoji}</span>}

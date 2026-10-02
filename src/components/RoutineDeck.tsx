@@ -2,18 +2,17 @@ import { useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { findFreeSlot } from '../lib/collision'
-import { inkOn } from '../lib/color'
 import { ceilTo, formatDuration, formatTime, minutesOfDay, snap, toDateKey } from '../lib/time'
 import { boundsOf, routineDropStart, routineDuration, useStore } from '../store/appStore'
 import { useUi } from '../store/uiStore'
 import type { Category, RoutineStep, RoutineTemplate } from '../types'
 import { CloseIcon, GripIcon, PlusIcon, TrashIcon } from './icons'
 import { failureMessage } from './messages'
+import { tagStyle } from './tags/tagStyle'
 import { swallowNextClick } from './Timeline'
 
 const DRAG_SLOP = 5
 
-const tagStyle = (tag: Category | undefined) => (tag ? { background: tag.color, color: inkOn(tag.color) } : undefined)
 
 export function RoutineDeck() {
   const open = useUi((s) => s.deckOpen)
@@ -205,7 +204,7 @@ function DragGhost() {
   if (!drag || !routine) return null
   return createPortal(
     <div
-      className="pointer-events-none fixed z-50 flex items-center gap-2 border-[3px] border-[#111] bg-accent px-3 py-1.5 text-sm font-black text-[#111] shadow-[5px_5px_0_0_#111]"
+      className="pointer-events-none fixed z-50 flex items-center gap-2 border-[3px] border-[#111] bg-accent px-3 py-1.5 text-sm font-black text-[#111] shadow-[5px_5px_0_0_var(--shadow)]"
       style={{ left: drag.x, top: drag.y, transform: 'translate(-12px, -130%) rotate(-3deg)' }}
     >
       <span>{routine.emoji ?? '✨'}</span>
@@ -280,11 +279,11 @@ function RoutineForm({
         {steps.map((step, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <select
-              className="field w-12! px-1! text-center"
+              className="field tagged w-12! px-1! text-center"
               value={step.categoryId}
               onChange={(e) => update(i, { categoryId: e.target.value })}
               aria-label="Tag"
-              style={tagStyle(categories.find((c) => c.id === step.categoryId))}
+              style={tagStyle(categories.find((c) => c.id === step.categoryId)?.color)}
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
