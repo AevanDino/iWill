@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Minutes } from '../types'
 
-export interface RoutineDrag {
+interface RoutineDrag {
   routineId: string
   x: number
   y: number

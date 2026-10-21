@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { notificationsSupported, requestNotificationPermission, sendNotification } from '../lib/notify'
-import { GRID_OPTIONS } from '../lib/time'
+import { clamp, GRID_OPTIONS } from '../lib/time'
 import { useStore, type Theme } from '../store/appStore'
 import { useUi } from '../store/uiStore'
 import { BellIcon, BellOffIcon, CloseIcon, MinusIcon, PlusIcon } from './icons'
@@ -30,7 +30,7 @@ export function SettingsPanel() {
     else useUi.getState().notify('🔕 Notifications are blocked in your browser settings')
   }
 
-  const zoom = (delta: number) => update({ hourHeight: Math.min(200, Math.max(40, settings.hourHeight + delta)) })
+  const zoom = (delta: number) => update({ hourHeight: clamp(settings.hourHeight + delta, 40, 200) })
 
   return (
     <AnimatePresence>

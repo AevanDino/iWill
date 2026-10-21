@@ -40,7 +40,7 @@ function fitToActiveBlock(s: P.PomodoroSession, block: TimeBlock | undefined, no
 }
 
 /** `viewer`: a session exists but another tab is running it. */
-export type TimerRole = 'owner' | 'viewer'
+type TimerRole = 'owner' | 'viewer'
 
 export interface PomodoroState {
   hydrated: boolean

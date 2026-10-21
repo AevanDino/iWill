@@ -17,7 +17,7 @@ import type { BlockMove, Category, DateKey, Minutes, RoutineTemplate, Settings, 
 export type Theme = 'system' | 'light' | 'dark'
 export type AppSettings = Settings & { theme: Theme }
 
-export const DEFAULT_SETTINGS: AppSettings = {
+const DEFAULT_SETTINGS: AppSettings = {
   hourHeight: 80,
   dayStartHour: 6,
   dayEndHour: 24,
@@ -45,12 +45,12 @@ function saveSettings(s: AppSettings) {
   }
 }
 
-export type SaveCategoryResult = { ok: true; category: Category } | { ok: false; reason: string }
+type SaveCategoryResult = { ok: true; category: Category } | { ok: false; reason: string }
 
 export const TAG_NAME_MAX = 24
 
 /** Tag list order: explicit `order`, then the seed order for tags saved before `order` existed. */
-export function sortCategories(categories: Category[]): Category[] {
+function sortCategories(categories: Category[]): Category[] {
   const rank = (c: Category) => {
     const seed = DEFAULT_CATEGORIES.findIndex((d) => d.id === c.id)
     return c.order ?? (seed < 0 ? Number.MAX_SAFE_INTEGER : seed)
@@ -58,7 +58,7 @@ export function sortCategories(categories: Category[]): Category[] {
   return [...categories].sort((a, b) => rank(a) - rank(b))
 }
 
-export interface NewBlock {
+interface NewBlock {
   title?: string
   categoryId?: string
   start: Minutes

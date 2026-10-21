@@ -9,7 +9,7 @@ import type { DateKey } from '../types'
  */
 
 export type Phase = 'focus' | 'short-break' | 'long-break'
-export type TimerStatus = 'idle' | 'running' | 'paused' | 'complete' | 'ended'
+type TimerStatus = 'idle' | 'running' | 'paused' | 'complete' | 'ended'
 
 export interface PomodoroConfig {
   focusMin: number
@@ -81,7 +81,7 @@ export interface PomodoroSession {
 
 export const QUICK = ''
 
-export function phaseMs(phase: Phase, c: PomodoroConfig): number {
+function phaseMs(phase: Phase, c: PomodoroConfig): number {
   const min = phase === 'focus' ? c.focusMin : phase === 'short-break' ? c.shortBreakMin : c.longBreakMin
   return min * 60_000
 }

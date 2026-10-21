@@ -1,3 +1,5 @@
+import { clamp } from './time'
+
 /** Tag colours on offer: bright ones that suit black ink, plus a few deep ones for white ink. */
 export const TAG_PALETTE = [
   '#b69cff',
@@ -29,7 +31,7 @@ function channels(hex: string): [number, number, number] | null {
 }
 
 /** WCAG relative luminance, 0 (black) to 1 (white). */
-export function luminance(hex: string): number {
+function luminance(hex: string): number {
   const c = channels(hex)
   if (!c) return 1
   const [r, g, b] = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)) as [number, number, number]
@@ -98,13 +100,11 @@ export function oklchToHex(color: Oklch): string {
   return (
     '#' +
     oklchToLinear({ ...color, c })
-      .map((v) => Math.round(Math.min(1, Math.max(0, toGamma(Math.min(1, Math.max(0, v))))) * 255))
+      .map((v) => Math.round(clamp(toGamma(clamp(v, 0, 1)), 0, 1) * 255))
       .map((v) => v.toString(16).padStart(2, '0'))
       .join('')
   )
 }
-
-const clamp01 = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 /** Perceptual distance between two colours (Euclidean in OKLab). */
 function oklabDistance(x: Oklch, y: Oklch): number {
@@ -133,10 +133,10 @@ export interface PhasePalette {
 export function phasePalette(seed: string): PhasePalette {
   const s = hexToOklch(seed)
   const focus = oklchToHex(s)
-  let short: Oklch = { l: clamp01(s.l + 0.1, 0.84, 0.91), c: s.c * 0.45, h: s.h }
+  let short: Oklch = { l: clamp(s.l + 0.1, 0.84, 0.91), c: s.c * 0.45, h: s.h }
   // A pale, greyish tag has no room to get lighter and calmer: step darker instead.
   if (oklabDistance(s, short) < 0.07) short = { ...short, l: s.l - 0.1 }
-  const longBreak = oklchToHex({ l: clamp01(s.l + 0.15, 0.9, 0.95), c: s.c * 0.25, h: s.h })
+  const longBreak = oklchToHex({ l: clamp(s.l + 0.15, 0.9, 0.95), c: s.c * 0.25, h: s.h })
   const shortBreak = oklchToHex(short)
   return {
     night: { focus: nightTone(seed, 0), shortBreak: nightTone(seed, 1), longBreak: nightTone(seed, 2) },

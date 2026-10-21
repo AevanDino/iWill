@@ -41,13 +41,6 @@ export interface RoutineTemplate {
   steps: RoutineStep[]
 }
 
-export interface DayState {
-  date: DateKey
-  blocks: TimeBlock[]
-  activeBlockId: string | null
-  lastModified: number
-}
-
 export interface Settings {
   hourHeight: number
   dayStartHour: number

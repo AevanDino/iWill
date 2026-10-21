@@ -60,7 +60,7 @@ export function toDateKey(d: Date): DateKey {
   return `${y}-${m}-${day}`
 }
 
-export function fromDateKey(key: DateKey): Date {
+function fromDateKey(key: DateKey): Date {
   const [y, m, d] = key.split('-').map(Number)
   return new Date(y!, m! - 1, d!)
 }
