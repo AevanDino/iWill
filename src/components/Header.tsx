@@ -29,7 +29,8 @@ export function Header() {
 
   return (
     // Below 30rem the header can't fit every button, so the less frequent ones move into the ⋯ menu.
-    <header className="relative z-30 flex items-center gap-1 border-b-[3px] border-line bg-paper px-2 py-2.5 @min-[30rem]/planner:gap-1.5 @xl/planner:gap-3 @xl/planner:px-5">
+    // Button labels and the wide gaps only appear from 50rem, where they fit; below that the buttons are icons.
+    <header className="relative z-30 flex items-center gap-1 border-b-[3px] border-line bg-paper px-2 py-2.5 @min-[30rem]/planner:gap-1.5 @min-[50rem]/planner:gap-3 @xl/planner:px-5">
       <div
         className="shrink-0 -rotate-2 border-[3px] border-[#111] bg-accent px-1.5 py-0.5 text-lg font-black tracking-tighter text-[#111] shadow-[3px_3px_0_0_var(--shadow)] select-none @xl/planner:px-2 @xl/planner:text-2xl"
         aria-label="iWill"
@@ -43,7 +44,7 @@ export function Header() {
         </button>
         <button
           type="button"
-          className="btn min-w-0 truncate px-2 text-xs @xl/planner:min-w-[7.5rem] @xl/planner:text-sm"
+          className="btn min-w-0 truncate px-2 text-xs @min-[50rem]/planner:min-w-[7.5rem] @min-[50rem]/planner:text-sm"
           onClick={() => setDate(today)}
           aria-label={`${formatDateLabel(date, today)} — jump to today`}
           data-tip="Jump to today"
@@ -61,9 +62,9 @@ export function Header() {
 
       <button type="button" className="btn bg-accent! text-[#111]!" onClick={addBlock} aria-label="Add block">
         <PlusIcon size={16} />
-        <span className="@max-xl/planner:hidden">Block</span>
+        <span className="@max-[50rem]/planner:hidden">Block</span>
       </button>
-      <div className="hidden items-center gap-1.5 @min-[30rem]/planner:flex @xl/planner:gap-3">
+      <div className="hidden items-center gap-1.5 @min-[30rem]/planner:flex @min-[50rem]/planner:gap-3">
         <FocusButton />
         <button
           type="button"
@@ -83,7 +84,7 @@ export function Header() {
           aria-label="Routine deck"
         >
           <StackIcon size={16} />
-          <span className="@max-xl/planner:hidden">Routines</span>
+          <span className="@max-[50rem]/planner:hidden">Routines</span>
         </button>
       </div>
       <MoreMenu />
@@ -201,7 +202,7 @@ function FocusButton() {
       data-tip="Quick focus — a Pomodoro not tied to a block"
     >
       <span aria-hidden="true">🍅</span>
-      <span className="@max-xl/planner:hidden">Focus</span>
+      <span className="@max-[50rem]/planner:hidden">Focus</span>
     </button>
   )
 }
