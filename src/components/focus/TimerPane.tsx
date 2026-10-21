@@ -251,7 +251,7 @@ function EdgeProgress({ pct, label }: { pct: number; label: string }) {
 
 function SessionBadge({ session, config }: { session: PomodoroSession; config: PomodoroConfig }) {
   const text =
-    session.phase === 'focus' ? `Focus · Session ${session.round} / ${config.sessionsBeforeLong}` : PHASE_LABEL[session.phase]
+    session.phase === 'focus' ? `Focus · ${session.round} of ${config.sessionsBeforeLong} before long break` : PHASE_LABEL[session.phase]
   return (
     <div className="flex min-w-0 items-center gap-2 border-[3px] border-chip bg-chip px-2.5 py-1 text-xs font-black tracking-widest text-on-chip uppercase sm:text-sm">
       {session.status === 'running' && <span className="blink size-2.5 shrink-0 bg-on-chip" aria-hidden="true" />}
@@ -519,7 +519,7 @@ function CompleteCard({ session, config }: { session: PomodoroSession; config: P
           ? next.phase === 'long-break'
             ? `That's ${config.sessionsBeforeLong} in a row. Long break earned.`
             : 'Nice work. Step away for a minute.'
-          : `Ready for focus ${next.round} of ${config.sessionsBeforeLong}?`}
+          : `Ready for focus ${next.round} of ${config.sessionsBeforeLong} before a long break?`}
       </p>
       <div className="flex flex-col gap-2">
         <BigButton onClick={p.next}>
