@@ -631,7 +631,7 @@ export function Timeline() {
         <div
           ref={contentRef}
           onPointerDown={createStart}
-          className="timeline-content relative cursor-copy select-none"
+          className={`timeline-content relative select-none ${selecting ? '' : 'cursor-copy'}`}
           data-rail={hasRail || undefined}
           style={{
             height: contentHeight,
@@ -758,7 +758,7 @@ export function Timeline() {
               return (
                 <div
                   key={b.id}
-                  className="lane cursor-grab"
+                  className={`lane ${selecting && !selected.has(b.id) ? 'cursor-pointer' : 'cursor-grab'}`}
                   style={{ top: yOf((p.start + p.end) / 2) - SLIVER_HIT / 2, height: SLIVER_HIT, zIndex: 13 }}
                   onPointerDown={(e) => actions.gestureStart(e, b.id, 'move')}
                   aria-hidden="true"
@@ -899,7 +899,7 @@ function SliverFlag({
       initial={false}
       animate={{ top }}
       transition={{ type: 'spring', stiffness: 520, damping: 40 }}
-      className="tagged pointer-events-auto absolute right-1.5 flex cursor-grab items-center gap-1 border-2 px-1.5 text-[11px] leading-none font-black shadow-brutal-sm select-none"
+      className={`tagged pointer-events-auto absolute right-1.5 flex ${selecting && !selected ? 'cursor-pointer' : 'cursor-grab'} items-center gap-1 border-2 px-1.5 text-[11px] leading-none font-black shadow-brutal-sm select-none`}
       style={{
         ...tagStyle(color),
         left: FLAG_INSET,

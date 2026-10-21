@@ -152,7 +152,8 @@ export const BlockView = memo(function BlockView({
       className={[
         'lane tagged select-none overflow-hidden outline-none',
         'focus-visible:ring-4 focus-visible:ring-accent focus-visible:ring-offset-2',
-        pinned ? 'cursor-pointer' : mode === 'dragging' ? 'cursor-grabbing' : 'cursor-grab',
+        // In select mode a click only toggles selection; a selected block can still be dragged as a group.
+        pinned || (selecting && !selected) ? 'cursor-pointer' : mode === 'dragging' ? 'cursor-grabbing' : 'cursor-grab',
         isActive && mode === 'idle' ? 'is-active-block' : '',
       ].join(' ')}
       style={{
