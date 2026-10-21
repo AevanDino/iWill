@@ -22,7 +22,6 @@
   --grid-strong: rgb(17 17 17 / 0.28);
   --accent: #ffd23f;
   --hot: #ff3b3b;
-  --dot: rgb(17 17 17 / 0.12);
   /* Cards and buttons; hard shadows; the inverted "chip" (black label, white text). */
   --card: #ffffff;
   --btn: var(--paper);
@@ -55,7 +54,6 @@
   --on-chip: #16151b;
   --grid: rgb(239 232 214 / 0.06);
   --grid-strong: rgb(239 232 214 / 0.18);
-  --dot: rgb(239 232 214 / 0.05);
   --hatch: rgb(239 232 214 / 0.1);
   --backdrop: rgb(0 0 0 / 0.6);
   color-scheme: dark;
@@ -89,8 +87,6 @@ body,
 body {
   margin: 0;
   background-color: var(--bg);
-  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-  background-size: 18px 18px;
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
